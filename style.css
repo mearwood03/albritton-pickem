@@ -11,18 +11,20 @@
   --win: #34c77b;
   --loss: #ff5a5f;
   --radius: 14px;
+  --font: "Saira", "Eurostile", "Segoe UI", system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; background: #001833; }
 body {
   margin: 0; min-height: 100vh;
-  font: 15px/1.4 Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font: 15px/1.4 var(--font);
   color: var(--text);
   background: radial-gradient(1200px 600px at 50% -200px, #0e3a6b 0%, var(--navy) 55%, #001833 100%) fixed;
 }
 button, input { font: inherit; color: inherit; }
 button { cursor: pointer; }
-h1, h2, h3, .wk-n, .tabs button, .team .abbr, .num { font-family: Oswald, Impact, sans-serif; letter-spacing: .02em; }
+h1, h2, h3, .wk-n, .tabs button, .team .abbr, .num { font-family: var(--font); font-weight: 800; letter-spacing: .02em; }
+.team .abbr, .tabs button { font-weight: 700; }
 [hidden] { display: none !important; }
 
 /* header */
@@ -96,7 +98,7 @@ h1 { margin: 0; font-size: 24px; line-height: 1.1; text-transform: uppercase; }
 .team .tx { min-width: 0; flex: 1; }
 .team .abbr { display: block; font-size: 18px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .team .nm { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.team .score { font-family: Oswald, sans-serif; font-size: 24px; }
+.team .score { font-family: var(--font); font-weight: 700; font-size: 24px; }
 .team.picked { background: var(--orange); border-color: var(--orange); }
 .team.picked img { background: #fff; border-radius: 50%; padding: 3px; }
 .team.picked .nm { color: rgba(255,255,255,.85); }
@@ -183,7 +185,7 @@ tr.mine td.name { background: #28334f; }
 .sheet thead th { position: sticky; top: 0; }
 .sheet th.tbcol { box-shadow: inset 0 3px 0 var(--orange); }
 .sheet .gh small.live { color: var(--orange); font-weight: 700; }
-.sheet td.tot { font-family: Oswald, sans-serif; font-size: 16px; }
+.sheet td.tot { font-family: var(--font); font-weight: 700; font-size: 16px; }
 .sheet td.tot.w { color: #7ee2a8; }
 .sheet td.tot.l { color: #ff9a9d; }
 .sheet td.c { font-weight: 700; font-size: 12px; }
@@ -217,7 +219,7 @@ tr.mine td.name { background: #28334f; }
 .modal-card input + input { margin-top: 8px; }
 .modal-card .links { margin: 12px 0 0; font-size: 12px; }
 .modal-card .msg { margin: 8px 0 0; font-size: 13px; min-height: 1em; }
-.sheet td.paid { font-family: Inter, sans-serif; font-size: 12px; color: var(--muted); }
+.sheet td.paid { font-family: var(--font); font-size: 12px; color: var(--muted); }
 .sheet td.paid.ok { color: #7ee2a8; font-weight: 700; font-size: 15px; }
 .sheet td.paid.no { color: #ff9a9d; }
 .sheet td.adm { white-space: nowrap; }

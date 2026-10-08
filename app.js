@@ -47,6 +47,7 @@ async function goWeek(w) {
 }
 
 let toastT;
+const why = (e) => (e && e.code ? ' (' + String(e.code).replace(/^(auth|firestore)\//, '') + ')' : '');
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.hidden = false;
   clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3200);
@@ -130,7 +131,7 @@ async function playerLogin(name, phone) {
     console.warn(e);
     if (e && e.code === 'auth/operation-not-allowed') toast('Logins aren’t switched on yet — ask Blake.');
     else if (e && e.code === 'auth/too-many-requests') toast('Too many tries. Wait a minute and try again.');
-    else toast('That didn’t work. Check your connection and try again.');
+    else toast('That didn’t work. Check your connection and try again.' + why(e));
   }
   S.busy = false; render();
 }
@@ -151,7 +152,7 @@ async function savePick(g, team) {
   const k = String(g.id);
   try {
     await sheetRef(S.week).set(Object.assign(sheetBase(), { last: k, ['g_' + k]: team, ['at_' + k]: FV.serverTimestamp() }), { merge: true });
-  } catch (e) { console.warn(e); toast('Couldn’t save that pick. Try again.'); }
+  } catch (e) { console.warn(e); toast('Couldn’t save that pick. Try again.' + why(e)); }
 }
 async function saveTb(val) {
   if (!canPick()) return;
@@ -163,13 +164,13 @@ async function saveTb(val) {
     await sheetRef(S.week).set(Object.assign(sheetBase(), { last: 'tb', tb: n, at_tb: FV.serverTimestamp() }), { merge: true });
     if ($('tbInput')) $('tbInput').dataset.dirty = '';
     toast('Tiebreaker saved: ' + n + ' points');
-  } catch (e) { console.warn(e); toast('Couldn’t save the tiebreaker. Try again.'); }
+  } catch (e) { console.warn(e); toast('Couldn’t save the tiebreaker. Try again.' + why(e)); }
 }
 async function savePaid(on) {
   if (!S.user) return;
   try {
     await sheetRef(S.week).set(Object.assign(sheetBase(), { last: 'paid', paid: !!on, at_paid: FV.serverTimestamp() }), { merge: true });
-  } catch (e) { console.warn(e); toast('Couldn’t save that. Try again.'); render(); }
+  } catch (e) { console.warn(e); toast('Couldn’t save that. Try again.' + why(e)); render(); }
 }
 async function saveName(raw) {
   const name = String(raw || '').trim().replace(/\s+/g, ' ').slice(0, 30);
@@ -178,7 +179,7 @@ async function saveName(raw) {
     await db.collection('players').doc(S.user.uid).set({ name, updatedAt: FV.serverTimestamp() }, { merge: true });
     if ($('nameBox')) $('nameBox').dataset.dirty = '';
     toast('Name saved: ' + name);
-  } catch (e) { console.warn(e); toast('Couldn’t save your name. Try again.'); }
+  } catch (e) { console.warn(e); toast('Couldn’t save your name. Try again.' + why(e)); }
 }
 
 /* ---------------- commissioner ---------------- */
@@ -221,7 +222,7 @@ $('adminReset').addEventListener('click', async () => {
 async function setStatus(uid, patch) {
   try {
     await db.collection('status').doc(wkKey(S.week) + '_' + uid).set(Object.assign({ season: S.season, week: S.week }, patch), { merge: true });
-  } catch (e) { console.warn(e); toast('Couldn’t save that. Are you still signed in as commissioner?'); }
+  } catch (e) { console.warn(e); toast('Couldn’t save that. Are you still signed in as commissioner?' + why(e)); }
 }
 
 
