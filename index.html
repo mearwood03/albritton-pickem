@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#002244">
+<title>Albritton's Pick Em's</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cellipse cx='32' cy='32' rx='28' ry='17' fill='%23FB4F14' transform='rotate(-35 32 32)'/%3E%3Cpath d='M22 42 42 22M27 33l4 4M31 29l4 4M35 25l4 4' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <svg class="ball" viewBox="0 0 64 64" aria-hidden="true"><ellipse cx="32" cy="32" rx="28" ry="17" transform="rotate(-35 32 32)"/><path d="M22 42 42 22M27 33l4 4M31 29l4 4M35 25l4 4"/></svg>
+      <div>
+        <h1>Albritton's Pick Em's</h1>
+        <div class="sub">Pick every winner &middot; TNF total points breaks ties</div>
+      </div>
+    </div>
+    <div class="who" id="who"></div>
+  </div>
+  <div class="venmo-bar">
+    <a class="venmo" id="venmoLink" href="#" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.6 3c.7 1.1 1 2.3 1 3.8 0 4.7-4 10.8-7.3 15.2H5.8L2.8 4.4l6.6-.6 1.6 12.8c1.5-2.4 3.3-6.2 3.3-8.8 0-1.4-.2-2.4-.6-3.2z"/></svg>
+      <span>Pay on Venmo <b id="venmoTag"></b></span>
+    </a>
+    <span class="fee" id="fee"></span>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button data-tab="picks" role="tab">My Picks</button>
+    <button data-tab="board" role="tab">Leaderboard</button>
+  </nav>
+</header>
+
+<main class="wrap">
+  <div class="weekbar">
+    <button class="nav" id="prevWk" aria-label="Previous week">&#8249;</button>
+    <div class="wk"><div class="wk-n" id="wkLabel">Week</div><div class="wk-s" id="wkSub"></div></div>
+    <button class="nav" id="nextWk" aria-label="Next week">&#8250;</button>
+  </div>
+  <div class="notice" id="notice" hidden></div>
+
+  <section id="tab-picks" hidden></section>
+  <section id="tab-board" hidden></section>
+
+  <p class="foot">Scores from ESPN, updated automatically <span id="updated"></span></p>
+</main>
+
+<div class="modal" id="nameModal" hidden>
+  <form class="modal-card" id="nameForm">
+    <h2>What should we call you?</h2>
+    <p>This is the name everyone sees on the leaderboard.</p>
+    <input id="nameInput" maxlength="30" autocomplete="nickname" required>
+    <div class="row">
+      <button type="button" class="btn ghost" id="nameCancel">Cancel</button>
+      <button class="btn">Save</button>
+    </div>
+  </form>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

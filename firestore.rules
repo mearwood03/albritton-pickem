@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Leaderboard names. Anyone can read; each player sets only their own.
+    match /players/{uid} {
+      allow read: if true;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 30;
+    }
+
+    // One pick sheet per player per week, id "<season>-<week>_<uid>".
+    //   g_<gameId>  = team picked,   at_<gameId> = server time it was picked
+    //   tb          = tiebreaker,    at_tb       = server time it was set
+    // Every save changes exactly one game (or the tiebreaker), named in "last",
+    // and must stamp it with the server's clock. The site ignores any pick
+    // stamped after kickoff, so a late change can't count.
+    match /picks/{id} {
+      allow read: if true;
+      allow create, update: if validSheet(id);
+      allow delete: if false;
+    }
+
+    function validSheet(id) {
+      let d = request.resource.data;
+      let k = d.last;
+      let changed = k == 'tb' ? ['last', 'tb', 'at_tb'] : ['last', 'g_' + k, 'at_' + k];
+      return request.auth != null
+        && d.uid == request.auth.uid
+        && d.season is int && d.week is int && d.week >= 1 && d.week <= 25
+        && d.wk == string(d.season) + '-' + string(d.week)
+        && id == d.wk + '_' + request.auth.uid
+        && k is string && k.size() > 0 && k.size() <= 20
+        && d['at_' + k] == request.time
+        && (k == 'tb'
+              ? d.tb is int && d.tb >= 0 && d.tb <= 200
+              : d['g_' + k] is string && d['g_' + k].size() > 0 && d['g_' + k].size() <= 5)
+        && (resource == null
+              ? d.keys().hasOnly(['uid', 'season', 'week', 'wk'].concat(changed))
+              : d.diff(resource.data).affectedKeys().hasOnly(changed));
+    }
+  }
+}
