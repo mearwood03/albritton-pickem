@@ -225,3 +225,15 @@ tr.mine td.name { background: #28334f; }
 .sheet td.adm { white-space: nowrap; }
 .removed { margin-top: 12px; font-size: 13px; color: var(--muted); }
 .removed b { color: #fff; }
+
+/* scoreboard column headers */
+.sheet th.gh { min-width: 92px; padding: 6px 8px; vertical-align: bottom; text-transform: none; letter-spacing: 0; }
+.sheet th.gh .sl { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #fff; font-weight: 600; line-height: 1.5; }
+.sheet th.gh .sl .lg { width: 18px; height: 18px; object-fit: contain; flex: none; }
+.sheet th.gh .sl .pts { margin-left: auto; font-size: 14px; font-weight: 700; }
+.sheet th.gh .sl.won { font-weight: 800; }
+.sheet th.gh .sl.won .pts { color: #7ee2a8; }
+.sheet th.gh .sl.lost { opacity: .5; }
+.sheet th.gh small.st { display: block; margin-top: 3px; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.sheet th.gh small.st.live { color: var(--orange); font-weight: 700; }
+.sheet th.gh small.st.fin { color: #7ee2a8; font-weight: 700; }

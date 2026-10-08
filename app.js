@@ -519,11 +519,15 @@ function weekSheetHtml(games, sc) {
   const tbg = sc.tbg;
   const tbLocked = tbg && isLocked(tbg);
   let h = '<div class="tablewrap"><table class="sheet"><thead><tr><th class="rank">#</th><th class="name">Player</th><th class="tot">W</th><th class="tot">L</th><th class="tot">Paid</th>';
+  // Column headers double as the scoreboard: each team's score, winner in bold, filled in as games finish.
   games.forEach((g) => {
-    const sc2 = g.state !== 'pre' && g.away.score != null ? g.away.score + '-' + g.home.score : '';
-    h += '<th class="gh' + (g === tbg ? ' tbcol' : '') + '"><span class="ghl">' + logoImg(g.away) + '<span>@</span>' + logoImg(g.home) + '</span>'
-      + esc(g.away.abbr) + ' @ ' + esc(g.home.abbr)
-      + '<small class="' + (isLive(g) ? 'live' : '') + '">' + esc(sc2 ? (g.final ? 'F ' : '') + sc2 : etDay(g.kick)) + '</small></th>';
+    const win = winnerOf(g);
+    const started = g.state !== 'pre' && g.away.score != null;
+    const line = (t) => '<span class="sl' + (win && win !== 'TIE' ? (win === t.abbr ? ' won' : ' lost') : '') + '">' + logoImg(t) + '<span class="ab">' + esc(t.abbr) + '</span>'
+      + '<span class="pts">' + (started ? t.score : '') + '</span></span>';
+    const st = g.void ? (g.detail || 'Postponed') : g.final ? 'Final' : isLive(g) ? g.detail : etDay(g.kick) + ' ' + new Date(g.kick).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    h += '<th class="gh' + (g === tbg ? ' tbcol' : '') + '">' + line(g.away) + line(g.home)
+      + '<small class="st' + (isLive(g) ? ' live' : g.final ? ' fin' : '') + '">' + esc(st) + (g === tbg ? ' · TB' : '') + '</small></th>';
   });
   h += '<th class="tot">TB</th><th class="tot">Off</th>' + (S.admin ? '<th>Commissioner</th>' : '') + '</tr></thead><tbody>';
   sc.rows.forEach((r) => {
@@ -587,12 +591,6 @@ function seasonSheetHtml() {
   return h;
 }
 
-function miniScore(g) {
-  const win = winnerOf(g);
-  const line = (t) => '<div class="ln' + (win && win !== 'TIE' && win !== t.abbr ? ' lost' : '') + '"><span>' + (t.logo ? '<img src="' + esc(t.logo) + '" alt="">' : '') + esc(t.name || t.abbr) + '</span><b>' + (g.state !== 'pre' && t.score != null ? t.score : '') + '</b></div>';
-  const right = isLive(g) && g.prob ? esc(g.prob.home >= 0.5 ? g.home.abbr + ' ' + Math.round(g.prob.home * 100) : g.away.abbr + ' ' + Math.round(g.prob.away * 100)) + '% to win' : '';
-  return '<div class="mini">' + line(g.away) + line(g.home) + '<div class="st' + (isLive(g) ? ' live' : '') + '"><span>' + esc(g.state === 'pre' ? fmtKick(g.kick) : g.detail) + '</span><span>' + right + '</span></div></div>';
-}
 function renderBoard(games) {
   let h = '<div class="subtabs"><button data-act="bv" data-v="week" class="' + (S.boardView === 'week' ? 'on' : '') + '">Week ' + S.week + '</button>'
     + '<button data-act="bv" data-v="season" class="' + (S.boardView === 'season' ? 'on' : '') + '">Season</button></div>';
@@ -610,7 +608,6 @@ function renderBoard(games) {
   } else {
     h += '<div class="card"><h3>' + S.season + ' Season</h3>' + seasonSheetHtml() + '</div>';
   }
-  h += '<div class="card"><h3>Scores · Week ' + S.week + '</h3><div class="scores">' + games.map(miniScore).join('') + '</div></div>';
   $('tab-board').innerHTML = h;
 }
 
