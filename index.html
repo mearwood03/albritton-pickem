@@ -18,7 +18,7 @@
       <svg class="ball" viewBox="0 0 64 64" aria-hidden="true"><ellipse cx="32" cy="32" rx="28" ry="17" transform="rotate(-35 32 32)"/><path d="M22 42 42 22M27 33l4 4M31 29l4 4M35 25l4 4"/></svg>
       <div>
         <h1>Albritton's Pick Em's</h1>
-        <div class="sub">Pick every winner &middot; TNF total points breaks ties</div>
+        <div class="sub">Pick every winner &middot; MNF total points breaks ties</div>
       </div>
     </div>
     <div class="who" id="who"></div>
@@ -47,18 +47,21 @@
   <section id="tab-picks" hidden></section>
   <section id="tab-board" hidden></section>
 
-  <p class="foot">Scores from ESPN, updated automatically <span id="updated"></span></p>
+  <p class="foot">Scores from ESPN, updated automatically <span id="updated"></span><br><button class="linkbtn" data-act="admin" id="adminLink">Commissioner</button></p>
 </main>
 
-<div class="modal" id="nameModal" hidden>
-  <form class="modal-card" id="nameForm">
-    <h2>What should we call you?</h2>
-    <p>This is the name everyone sees on the leaderboard.</p>
-    <input id="nameInput" maxlength="30" autocomplete="nickname" required>
+<div class="modal" id="adminModal" hidden>
+  <form class="modal-card" id="adminForm">
+    <h2>Commissioner</h2>
+    <p>Blake's login for marking who paid and removing people.</p>
+    <input id="adminEmail" type="email" autocomplete="username" placeholder="Email" required>
+    <input id="adminPass" type="password" autocomplete="current-password" placeholder="Password (6+ characters)" minlength="6" required>
     <div class="row">
-      <button type="button" class="btn ghost" id="nameCancel">Cancel</button>
-      <button class="btn">Save</button>
+      <button type="button" class="btn ghost" id="adminCancel">Cancel</button>
+      <button class="btn">Sign in</button>
     </div>
+    <p class="links"><button type="button" class="linkbtn" id="adminCreate">First time? Create the account</button> · <button type="button" class="linkbtn" id="adminReset">Forgot password</button></p>
+    <p class="muted msg" id="adminMsg"></p>
   </form>
 </div>
 

@@ -1,4 +1,4 @@
-/* Albritton's Pick Em's — ESPN scores + Firebase (Google sign-in + Firestore) */
+/* Albritton's Pick Em's — ESPN scores + Firebase (name + phone number, no Google sign-in) */
 (function () {
 'use strict';
 const CFG = window.PICKEM_CONFIG || {};
@@ -8,20 +8,27 @@ const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scorebo
 const WEEKS = 18; // regular season
 const LIVE_MS = 30 * 1000; // refresh while games are on
 const IDLE_MS = 5 * 60 * 1000; // refresh otherwise
+// Keep the same in firestore.rules.
+const ADMIN_EMAIL = String(CFG.commissioner || 'blakealbritton6@gmail.com').toLowerCase();
+// Players log in with name + phone number. Behind the scenes that's a Firebase
+// email/password account on this made-up domain (no email is ever sent).
+const PLAYER_DOMAIN = 'players.albritton-pickem.app';
 
 const S = {
-  user: null, players: {}, docs: [], // docs: this season's pick sheets
+  user: null, admin: false, players: {}, status: {}, docs: [], // docs: this season's pick sheets
   season: null, curWeek: null, week: null,
   sb: {}, // week -> games[]
-  tab: 'picks', boardView: 'week', updated: 0, ready: false,
+  tab: 'picks', boardView: 'week', updated: 0, ready: false, busy: false,
 };
 try { S.tab = localStorage.getItem('ape:tab') === 'board' ? 'board' : 'picks'; } catch (e) {}
 
 /* ---------------- header bits ---------------- */
 const venmo = String(CFG.venmo || 'Blakealbritton6').replace(/^@/, '');
+const fee = CFG.entryFee || '';
 $('venmoTag').textContent = '@' + venmo;
 $('venmoLink').href = 'https://venmo.com/u/' + encodeURIComponent(venmo);
-$('fee').textContent = CFG.entryFee || '';
+$('fee').textContent = fee;
+const feeAmt = (fee.match(/\$\s?\d+(\.\d\d)?/) || [''])[0];
 
 document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
 function setTab(t) {
@@ -42,38 +49,28 @@ async function goWeek(w) {
 let toastT;
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.hidden = false;
-  clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 2600);
+  clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3200);
 }
 
 /* ---------------- Firebase ---------------- */
 const fbOn = !!(CFG.firebase && CFG.firebase.apiKey && !/PASTE/.test(CFG.firebase.apiKey) && window.firebase);
-let auth = null, db = null, FV = null, seasonUnsub = null;
+let auth = null, db = null, FV = null, seasonUnsub = null, statusUnsub = null;
 if (fbOn) {
   firebase.initializeApp(CFG.firebase);
   auth = firebase.auth();
   db = firebase.firestore();
   FV = firebase.firestore.FieldValue;
-  auth.getRedirectResult().catch(() => {});
   auth.onAuthStateChanged((u) => {
-    S.user = u;
-    if (u && !(S.players[u.uid] && S.players[u.uid].name)) maybeAskName();
+    const email = u && u.email ? u.email.toLowerCase() : '';
+    S.admin = !!(u && email === ADMIN_EMAIL && u.emailVerified);
+    S.user = u && email.endsWith('@' + PLAYER_DOMAIN) ? u : null;
     render();
   });
   db.collection('players').onSnapshot((snap) => {
     S.players = {};
     snap.forEach((d) => { S.players[d.id] = d.data(); });
-    if (S.user && !S.players[S.user.uid]) maybeAskName();
     render();
   }, (e) => console.warn('players', e));
-}
-async function signIn() {
-  const p = new firebase.auth.GoogleAuthProvider();
-  p.setCustomParameters({ prompt: 'select_account' });
-  try { await auth.signInWithPopup(p); }
-  catch (e) {
-    if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) auth.signInWithRedirect(p);
-    else if (e && e.code !== 'auth/popup-closed-by-user') toast('Sign-in didn’t work. Try again.');
-  }
 }
 function subscribeSeason() {
   if (!fbOn || seasonUnsub || !S.season) return;
@@ -81,6 +78,12 @@ function subscribeSeason() {
     S.docs = snap.docs.map((d) => parseSheet(d.data({ serverTimestamps: 'estimate' })));
     render();
   }, (e) => { console.warn('picks', e); });
+  // Commissioner's paid / removed marks, one doc per player per week: "<season>-<week>_<uid>".
+  statusUnsub = db.collection('status').where('season', '==', S.season).onSnapshot((snap) => {
+    S.status = {};
+    snap.forEach((d) => { S.status[d.id] = d.data(); });
+    render();
+  }, (e) => { console.warn('status', e); });
 }
 // A pick sheet is one doc per player per week: g_<gameId> = team, at_<gameId> = server time of that pick.
 function parseSheet(d) {
@@ -91,68 +94,136 @@ function parseSheet(d) {
       picks[id] = { team: d[k], at: tsMs(d['at_' + id]) };
     }
   });
-  return { uid: d.uid, week: d.week, season: d.season, picks, tb: typeof d.tb === 'number' ? d.tb : null, tbAt: tsMs(d.at_tb) };
+  return { uid: d.uid, week: d.week, season: d.season, picks, tb: typeof d.tb === 'number' ? d.tb : null, tbAt: tsMs(d.at_tb), paid: d.paid === true };
 }
 const tsMs = (t) => (t && t.toMillis ? t.toMillis() : t ? Number(t) : Date.now());
 const wkKey = (w) => S.season + '-' + w;
 const sheetRef = (w) => db.collection('picks').doc(wkKey(w) + '_' + S.user.uid);
 const mySheet = (w) => S.user && S.docs.find((d) => d.uid === S.user.uid && d.week === w);
+const statusOf = (w, uid) => S.status[wkKey(w) + '_' + uid] || {};
+const isRemoved = (w, uid) => statusOf(w, uid).removed === true;
+const nameOf = (uid) => (S.players[uid] && S.players[uid].name) || 'Player';
 
+/* ---------------- player login: name + phone ---------------- */
+const digitsOf = (p) => { let d = String(p || '').replace(/\D/g, ''); if (d.length === 11 && d[0] === '1') d = d.slice(1); return d; };
+async function playerLogin(name, phone) {
+  name = String(name || '').trim().replace(/\s+/g, ' ').slice(0, 30);
+  const d = digitsOf(phone);
+  if (!name) return toast('Type your name.');
+  if (d.length !== 10) return toast('Type your 10-digit phone number.');
+  const email = 'p' + d + '@' + PLAYER_DOMAIN;
+  const pass = 'ape-' + d + '-pickem';
+  S.busy = true; render();
+  try {
+    try { await auth.signInWithEmailAndPassword(email, pass); }
+    catch (e) {
+      if (e && (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential' || e.code === 'auth/invalid-login-credentials')) {
+        await auth.createUserWithEmailAndPassword(email, pass);
+      } else throw e;
+    }
+    S.user = auth.currentUser;
+    if (!S.players[S.user.uid] || S.players[S.user.uid].name !== name) {
+      await db.collection('players').doc(S.user.uid).set({ name, updatedAt: FV.serverTimestamp() }, { merge: true });
+    }
+    toast('You’re in, ' + name + '!');
+  } catch (e) {
+    console.warn(e);
+    if (e && e.code === 'auth/operation-not-allowed') toast('Logins aren’t switched on yet — ask Blake.');
+    else if (e && e.code === 'auth/too-many-requests') toast('Too many tries. Wait a minute and try again.');
+    else toast('That didn’t work. Check your connection and try again.');
+  }
+  S.busy = false; render();
+}
+async function logout() { await auth.signOut(); S.user = null; S.admin = false; render(); }
+
+/* ---------------- saving picks ---------------- */
+function canPick() {
+  if (!S.user) { toast('Enter your name and phone number first.'); return false; }
+  if (isRemoved(S.week, S.user.uid)) { toast('Blake removed you from this week. Text him if that’s a mistake.'); return false; }
+  const sh = mySheet(S.week);
+  if (!(sh && sh.paid)) { toast('Check the “I’ve paid” box first.'); return false; }
+  return true;
+}
+const sheetBase = () => ({ uid: S.user.uid, season: S.season, week: S.week, wk: wkKey(S.week) });
 async function savePick(g, team) {
-  if (!S.user) return signIn();
+  if (!canPick()) return;
   if (isLocked(g)) return toast('That game has started — picks are locked.');
   const k = String(g.id);
   try {
-    await sheetRef(S.week).set({
-      uid: S.user.uid, season: S.season, week: S.week, wk: wkKey(S.week), last: k,
-      ['g_' + k]: team, ['at_' + k]: FV.serverTimestamp(),
-    }, { merge: true });
-  } catch (e) { console.warn(e); toast('Couldn’t save that pick. Check your connection and try again.'); }
+    await sheetRef(S.week).set(Object.assign(sheetBase(), { last: k, ['g_' + k]: team, ['at_' + k]: FV.serverTimestamp() }), { merge: true });
+  } catch (e) { console.warn(e); toast('Couldn’t save that pick. Try again.'); }
 }
 async function saveTb(val) {
-  if (!S.user) return signIn();
-  const games = S.sb[S.week] || [];
-  const tnf = tnfGame(games);
-  if (tnf && isLocked(tnf)) return toast('Tiebreaker is locked — TNF has started.');
+  if (!canPick()) return;
+  const tbg = tbGame(S.sb[S.week] || []);
+  if (tbg && isLocked(tbg)) return toast('Tiebreaker is locked — MNF has started.');
   const n = parseInt(val, 10);
   if (!(n >= 0 && n <= 200)) return toast('Enter total points between 0 and 200.');
   try {
-    await sheetRef(S.week).set({
-      uid: S.user.uid, season: S.season, week: S.week, wk: wkKey(S.week), last: 'tb',
-      tb: n, at_tb: FV.serverTimestamp(),
-    }, { merge: true });
+    await sheetRef(S.week).set(Object.assign(sheetBase(), { last: 'tb', tb: n, at_tb: FV.serverTimestamp() }), { merge: true });
     if ($('tbInput')) $('tbInput').dataset.dirty = '';
     toast('Tiebreaker saved: ' + n + ' points');
   } catch (e) { console.warn(e); toast('Couldn’t save the tiebreaker. Try again.'); }
 }
-
-/* ---------------- name ---------------- */
-let askedName = false;
-function maybeAskName(force) {
-  if (!S.user || (!force && askedName)) return;
-  askedName = true;
-  const cur = (S.players[S.user.uid] && S.players[S.user.uid].name) || S.user.displayName || '';
-  $('nameInput').value = cur;
-  $('nameModal').hidden = false;
-  setTimeout(() => $('nameInput').focus(), 50);
-}
-$('nameCancel').addEventListener('click', () => { $('nameModal').hidden = true; });
-$('nameForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (await saveName($('nameInput').value)) $('nameModal').hidden = true;
-});
-async function saveName(raw) {
-  const name = String(raw || '').trim().slice(0, 30);
-  if (!name) { toast('Type your name first.'); return false; }
-  if (!S.user) { signIn(); return false; }
+async function savePaid(on) {
+  if (!S.user) return;
   try {
-    await db.collection('players').doc(S.user.uid).set({ name, updatedAt: FV.serverTimestamp() });
+    await sheetRef(S.week).set(Object.assign(sheetBase(), { last: 'paid', paid: !!on, at_paid: FV.serverTimestamp() }), { merge: true });
+  } catch (e) { console.warn(e); toast('Couldn’t save that. Try again.'); render(); }
+}
+async function saveName(raw) {
+  const name = String(raw || '').trim().replace(/\s+/g, ' ').slice(0, 30);
+  if (!name || !S.user) return toast('Type your name first.');
+  try {
+    await db.collection('players').doc(S.user.uid).set({ name, updatedAt: FV.serverTimestamp() }, { merge: true });
     if ($('nameBox')) $('nameBox').dataset.dirty = '';
     toast('Name saved: ' + name);
-    return true;
-  } catch (err) { console.warn(err); toast('Couldn’t save your name. Try again.'); return false; }
+  } catch (e) { console.warn(e); toast('Couldn’t save your name. Try again.'); }
 }
-const nameOf = (uid) => (S.players[uid] && S.players[uid].name) || 'Player';
+
+/* ---------------- commissioner ---------------- */
+function openAdmin() {
+  if (!fbOn) return;
+  $('adminEmail').value = ADMIN_EMAIL; $('adminPass').value = ''; $('adminMsg').textContent = '';
+  $('adminModal').hidden = false; setTimeout(() => $('adminPass').focus(), 50);
+}
+$('adminCancel').addEventListener('click', () => { $('adminModal').hidden = true; });
+async function adminAuth(create) {
+  const email = $('adminEmail').value.trim().toLowerCase(), pass = $('adminPass').value;
+  const msg = $('adminMsg');
+  if (email !== ADMIN_EMAIL) { msg.textContent = 'Only ' + ADMIN_EMAIL + ' can be the commissioner.'; return; }
+  if (pass.length < 6) { msg.textContent = 'Password must be at least 6 characters.'; return; }
+  msg.textContent = 'One sec…';
+  try {
+    const cred = create ? await auth.createUserWithEmailAndPassword(email, pass) : await auth.signInWithEmailAndPassword(email, pass);
+    await cred.user.reload();
+    if (!auth.currentUser.emailVerified) {
+      await auth.currentUser.sendEmailVerification();
+      msg.textContent = 'We emailed a link to ' + email + '. Click it, then come back and sign in.';
+      await auth.signOut();
+      return;
+    }
+    S.admin = true; $('adminModal').hidden = true; toast('Commissioner tools are on (Leaderboard tab).'); render();
+  } catch (e) {
+    console.warn(e);
+    msg.textContent = e && e.code === 'auth/email-already-in-use' ? 'That account already exists — just sign in.'
+      : e && (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found' || e.code === 'auth/invalid-login-credentials') ? 'Wrong password, or the account isn’t created yet (tap “First time?”).'
+      : e && e.code === 'auth/operation-not-allowed' ? 'Turn on Email/Password sign-in in Firebase first.'
+      : 'That didn’t work. Try again.';
+  }
+}
+$('adminForm').addEventListener('submit', (e) => { e.preventDefault(); adminAuth(false); });
+$('adminCreate').addEventListener('click', () => adminAuth(true));
+$('adminReset').addEventListener('click', async () => {
+  try { await auth.sendPasswordResetEmail(ADMIN_EMAIL); $('adminMsg').textContent = 'Password reset email sent to ' + ADMIN_EMAIL + '.'; }
+  catch (e) { console.warn(e); $('adminMsg').textContent = 'Couldn’t send the reset email.'; }
+});
+async function setStatus(uid, patch) {
+  try {
+    await db.collection('status').doc(wkKey(S.week) + '_' + uid).set(Object.assign({ season: S.season, week: S.week }, patch), { merge: true });
+  } catch (e) { console.warn(e); toast('Couldn’t save that. Are you still signed in as commissioner?'); }
+}
+
 
 /* ---------------- ESPN ---------------- */
 function norm(e) {
@@ -233,11 +304,10 @@ function winnerOf(g) {
   return 'TIE';
 }
 const etDay = (ms) => new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'America/New_York' }).format(new Date(ms));
-// TNF = the last Thursday kickoff of the week (the night game on Thanksgiving); if there is none, the week's first game.
-function tnfGame(games) {
+// Tiebreaker = the week's last game (Monday Night Football; the later one if there are two).
+function tbGame(games) {
   if (!games || !games.length) return null;
-  const thu = games.filter((g) => etDay(g.kick) === 'Thu');
-  return thu.length ? thu.reduce((a, b) => (b.kick > a.kick ? b : a)) : games[0];
+  return games.reduce((a, b) => (b.kick >= a.kick ? b : a));
 }
 const total = (g) => (g && g.home.score != null && g.away.score != null ? g.home.score + g.away.score : null);
 
@@ -245,11 +315,11 @@ const total = (g) => (g && g.home.score != null && g.away.score != null ? g.home
 function scoreWeek(w) {
   const games = S.sb[w] || [];
   const byId = {}; games.forEach((g) => { byId[g.id] = g; });
-  const tnf = tnfGame(games);
-  const tnfTotal = tnf && (tnf.final || isLive(tnf)) ? total(tnf) : null;
+  const tbg = tbGame(games);
+  const tbTotal = tbg && (tbg.final || isLive(tbg)) ? total(tbg) : null;
   const done = games.length > 0 && games.every((g) => g.final || g.void);
-  const rows = S.docs.filter((d) => d.week === w).map((d) => {
-    const r = { uid: d.uid, w: 0, l: 0, live: 0, pend: 0, made: 0, tb: null, diff: null };
+  const rows = S.docs.filter((d) => d.week === w && !isRemoved(w, d.uid) && (Object.keys(d.picks).length || d.tb != null)).map((d) => {
+    const r = { uid: d.uid, w: 0, l: 0, live: 0, pend: 0, made: 0, tb: null, diff: null, paid: d.paid };
     Object.keys(d.picks).forEach((gid) => {
       const g = byId[gid]; const p = d.picks[gid];
       if (!g || p.at >= g.kick) return; // a pick saved after kickoff doesn't count
@@ -259,21 +329,21 @@ function scoreWeek(w) {
       else if (win === p.team) r.w++;
       else if (win !== 'TIE') r.l++;
     });
-    if (d.tb != null && tnf && d.tbAt < tnf.kick) {
+    if (d.tb != null && tbg && d.tbAt < tbg.kick) {
       r.tb = d.tb;
-      if (tnfTotal != null) r.diff = Math.abs(tnfTotal - d.tb);
+      if (tbTotal != null) r.diff = Math.abs(tbTotal - d.tb);
     }
     r.max = r.w + r.live + r.pend;
     return r;
   });
   rows.sort((a, b) => b.w - a.w || (a.diff == null) - (b.diff == null) || (a.diff || 0) - (b.diff || 0) || b.max - a.max || nameOf(a.uid).localeCompare(nameOf(b.uid)));
   let winners = [];
-  if (done && rows.length && tnf && tnf.final) {
+  if (done && rows.length && tbg && tbg.final) {
     const top = rows[0];
     winners = rows.filter((r) => r.w === top.w && r.diff === top.diff).map((r) => r.uid);
   }
   rows.forEach((r, i) => { r.rank = i && rows[i - 1].w === r.w && rows[i - 1].diff === r.diff ? rows[i - 1].rank : i + 1; });
-  return { rows, winners, done, tnf, tnfTotal, games };
+  return { rows, winners, done, tbg, tbTotal, games };
 }
 function scoreSeason() {
   const tot = {};
@@ -294,6 +364,7 @@ function scoreSeason() {
 
 /* ---------------- render ---------------- */
 const fmtKick = (ms) => new Date(ms).toLocaleString([], { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const matchup = (g) => g.away.name + ' @ ' + g.home.name;
 
 function render() {
   document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === S.tab));
@@ -307,7 +378,7 @@ function render() {
   $('nextWk').disabled = S.week >= WEEKS;
   const notes = [];
   if (!fbOn) notes.push('Picks aren’t switched on yet — paste the Firebase settings into <b>config.js</b> (see README). Scores below are live.');
-  else if (!S.user && S.tab === 'picks') notes.push('Sign in with Google to make your picks. <button class="btn sm" data-act="signin">Sign in</button>');
+  if (S.admin) notes.push('You’re signed in as <b>commissioner</b>. Mark who paid or remove people on the Leaderboard tab. <button class="btn sm ghost" data-act="logout">Sign out</button>');
   $('notice').innerHTML = notes.join('<br>');
   $('notice').hidden = !notes.length;
   if (games === null) { $('tab-' + S.tab).innerHTML = '<div class="empty">Couldn’t reach ESPN for this week. It will try again shortly.</div>'; return; }
@@ -318,31 +389,39 @@ function render() {
 }
 function renderWho() {
   const el = $('who');
-  if (!fbOn) { el.innerHTML = ''; return; }
-  if (!S.user) { el.innerHTML = '<button class="btn sm" data-act="signin">Sign in</button>'; return; }
-  el.innerHTML = '<div class="me">' + esc(nameOf(S.user.uid)) + '<br><button data-act="rename">Change name</button> · <button data-act="signout">Sign out</button></div>';
+  if (!fbOn || !S.user) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="me">' + esc(nameOf(S.user.uid)) + '<br><button data-act="logout">Not you? Switch</button></div>';
 }
 document.addEventListener('click', (e) => {
   const a = e.target.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act;
-  if (act === 'signin') signIn();
-  else if (act === 'signout') auth.signOut();
-  else if (act === 'rename') maybeAskName(true);
+  if (act === 'login') playerLogin($('loginName').value, $('loginPhone').value);
+  else if (act === 'logout') logout();
+  else if (act === 'admin') openAdmin();
   else if (act === 'pick') {
     const g = (S.sb[S.week] || []).find((x) => x.id === a.dataset.g);
     if (g) savePick(g, a.dataset.t);
   } else if (act === 'tb') saveTb($('tbInput').value);
   else if (act === 'savename') saveName($('nameBox').value);
   else if (act === 'bv') { S.boardView = a.dataset.v; render(); }
+  else if (act === 'confirm') setStatus(a.dataset.u, { confirmed: a.dataset.on === '1' });
+  else if (act === 'remove') {
+    const on = a.dataset.on === '1';
+    if (!on || confirm('Remove ' + nameOf(a.dataset.u) + ' from Week ' + S.week + '? Their picks stop counting and they can’t pick until you restore them.')) setStatus(a.dataset.u, { removed: on });
+  }
 });
-document.addEventListener('input', (e) => { if (e.target.id === 'tbInput' || e.target.id === 'nameBox') e.target.dataset.dirty = '1'; });
+document.addEventListener('change', (e) => { if (e.target.id === 'paidBox') savePaid(e.target.checked); });
+document.addEventListener('input', (e) => {
+  if (['tbInput', 'nameBox', 'loginName', 'loginPhone'].includes(e.target.id)) e.target.dataset.dirty = '1';
+});
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
   if (e.target.id === 'tbInput') saveTb(e.target.value);
   else if (e.target.id === 'nameBox') saveName(e.target.value);
+  else if (e.target.id === 'loginName' || e.target.id === 'loginPhone') playerLogin($('loginName').value, $('loginPhone').value);
 });
 
-function teamBtn(g, side, mine) {
+function teamBtn(g, side, mine, open) {
   const t = g[side];
   const win = winnerOf(g);
   const picked = mine && mine.team === t.abbr;
@@ -350,7 +429,7 @@ function teamBtn(g, side, mine) {
   if (picked) { cls.push('picked'); if (win && win !== 'TIE') cls.push(win === t.abbr ? 'right' : 'wrong'); }
   if (win && win !== 'TIE' && win !== t.abbr) cls.push('lost');
   const showScore = g.state !== 'pre' && t.score != null;
-  const dis = !fbOn || isLocked(g) ? ' disabled' : '';
+  const dis = !open || isLocked(g) ? ' disabled' : '';
   return '<button class="' + cls.join(' ') + '" data-act="pick" data-g="' + esc(g.id) + '" data-t="' + esc(t.abbr) + '"' + dis + ' aria-pressed="' + picked + '">'
     + (t.logo ? '<img src="' + esc(t.logo) + '" alt="" loading="lazy">' : '')
     + '<span class="tx"><span class="abbr">' + esc(t.full || t.name || t.abbr) + '</span>'
@@ -363,80 +442,95 @@ function statusText(g) {
   if (g.state === 'pre') return '<span class="status">' + esc(fmtKick(g.kick)) + (g.tv ? ' · ' + esc(g.tv) : '') + '</span>';
   return '<span class="status' + (isLive(g) ? ' live' : '') + '">' + esc(g.detail) + '</span>';
 }
+// Keep half-typed text (and focus) across the automatic refreshes.
+function keep(id, fallback) {
+  const el = $(id);
+  const typing = el && el.dataset.dirty === '1' && !el.disabled;
+  return { val: typing ? el.value : fallback, attr: typing ? ' data-dirty="1"' : '', focus: el && document.activeElement === el };
+}
 
 function renderPicks(games) {
-  const tnf = tnfGame(games);
+  const tbg = tbGame(games);
   const sheet = mySheet(S.week);
   const myPicks = (sheet && sheet.picks) || {};
+  const paid = !!(sheet && sheet.paid);
+  const removed = S.user && isRemoved(S.week, S.user.uid);
+  const open = fbOn && !!S.user && paid && !removed;
   const made = games.filter((g) => myPicks[g.id]).length;
   const nextLock = games.filter((g) => !isLocked(g)).map((g) => g.kick)[0];
-  const tbLocked = tnf && isLocked(tnf);
-  // Keep a half-typed tiebreaker (and focus) across the automatic refreshes.
-  const old = $('tbInput');
-  const typing = old && old.dataset.dirty === '1' && !old.disabled;
-  const hadFocus = old && document.activeElement === old;
-  const tbVal = typing ? old.value : sheet && sheet.tb != null ? sheet.tb : '';
+  const tbLocked = tbg && isLocked(tbg);
+  const ln = keep('loginName', ''), lp = keep('loginPhone', '');
+  const nb = keep('nameBox', S.user ? (S.players[S.user.uid] && S.players[S.user.uid].name) || '' : '');
+  const tb = keep('tbInput', sheet && sheet.tb != null ? sheet.tb : '');
   let h = '';
-  const oldN = $('nameBox');
-  const typingN = oldN && oldN.dataset.dirty === '1';
-  const focusN = oldN && document.activeElement === oldN;
-  if (fbOn) {
-    const saved = S.user && S.players[S.user.uid] && S.players[S.user.uid].name;
-    const nVal = typingN ? oldN.value : saved || '';
-    h += '<div class="card namecard' + (S.user && !saved ? ' need' : '') + '"><label for="nameBox"><b>Your name</b>'
-      + '<span class="muted">' + (S.user ? (saved ? 'Shown on the leaderboard' : 'Add your name so everyone knows whose picks are whose') : 'Sign in with Google to save your name and picks') + '</span></label>'
-      + '<div class="nameRow"><input id="nameBox" maxlength="30" autocomplete="nickname" placeholder="First & last name" value="' + esc(nVal) + '"' + (typingN ? ' data-dirty="1"' : '') + '>'
-      + (S.user ? '<button class="btn sm" data-act="savename">Save</button>' : '<button class="btn sm" data-act="signin">Sign in</button>') + '</div></div>';
-  }
-  if (fbOn && S.user) {
+  if (fbOn && !S.user) {
+    h += '<div class="card login"><h3>Make your picks</h3>'
+      + '<p class="muted">Enter your name and phone number. Use the same phone number any time to come back and change your picks. Your number is never shown on the site.</p>'
+      + '<div class="fields"><input id="loginName" maxlength="30" autocomplete="name" placeholder="Your name" value="' + esc(ln.val) + '"' + ln.attr + '>'
+      + '<input id="loginPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="Phone number" value="' + esc(lp.val) + '"' + lp.attr + '>'
+      + '<button class="btn" data-act="login"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? 'One sec…' : 'Start picking') + '</button></div></div>';
+  } else if (fbOn) {
+    h += '<div class="card namecard"><label for="nameBox"><b>Your name</b><span class="muted">Shown on the leaderboard</span></label>'
+      + '<div class="nameRow"><input id="nameBox" maxlength="30" autocomplete="name" value="' + esc(nb.val) + '"' + nb.attr + '>'
+      + '<button class="btn sm" data-act="savename">Save</button></div></div>';
+    if (removed) h += '<div class="notice">Blake removed you from Week ' + S.week + '. If you’ve paid, text him and he can add you back.</div>';
+    h += '<label class="card paidcard' + (paid ? ' on' : '') + '"><input type="checkbox" id="paidBox"' + (paid ? ' checked' : '') + (removed ? ' disabled' : '') + '>'
+      + '<span><b>I’ve paid my ' + esc(feeAmt || 'entry') + ' for Week ' + S.week + '</b><span class="muted">Venmo <a href="https://venmo.com/u/' + esc(encodeURIComponent(venmo)) + '" target="_blank" rel="noopener">@' + esc(venmo) + '</a>. Required before you can pick.</span></span></label>';
     h += '<div class="card summary"><div class="progress"><b>' + made + ' of ' + games.length + ' picked</b>'
-      + '<div class="muted" style="font-size:12px">' + (nextLock ? 'Each game locks at kickoff · next lock ' + esc(fmtKick(nextLock)) : 'All games are locked for this week') + '</div>'
+      + '<div class="muted" style="font-size:12px">' + (nextLock ? 'Picks save as you tap · each game locks at kickoff · next lock ' + esc(fmtKick(nextLock)) : 'All games are locked for this week') + '</div>'
       + '<div class="bar"><i style="width:' + Math.round((made / games.length) * 100) + '%"></i></div></div>'
-      + '<div class="tb"><span class="lbl">Tiebreaker: total points in<br><b>' + (tnf ? esc(tnf.away.name + ' @ ' + tnf.home.name) : 'TNF') + '</b>'
-      + '</span>'
-      + '<input id="tbInput" type="number" inputmode="numeric" min="0" max="200" placeholder="pts" value="' + esc(tbVal) + '"' + (typing ? ' data-dirty="1"' : '') + (tbLocked ? ' disabled' : '') + '>'
-      + (tbLocked ? '<span class="muted" style="font-size:12px">Locked</span>' : '<button class="btn sm" data-act="tb">Save</button>') + '</div></div>';
+      + '<div class="tb"><span class="lbl">Tiebreaker (MNF): total points in<br><b>' + (tbg ? esc(matchup(tbg)) : 'MNF') + '</b></span>'
+      + '<input id="tbInput" type="number" inputmode="numeric" min="0" max="200" placeholder="pts" value="' + esc(tb.val) + '"' + tb.attr + (tbLocked || !open ? ' disabled' : '') + '>'
+      + (tbLocked ? '<span class="muted" style="font-size:12px">Locked</span>' : '<button class="btn sm" data-act="tb"' + (open ? '' : ' disabled') + '>Save</button>') + '</div></div>';
   }
   h += '<div class="games">';
   games.forEach((g) => {
     const mine = myPicks[g.id];
     const late = mine && mine.at >= g.kick;
-    h += '<div class="game' + (g === tnf ? ' tnf' : '') + '"><div class="game-head">' + statusText(g)
-      + '<span>' + (g === tnf ? '<span class="tag">Tiebreaker</span>' : '') + (isLocked(g) && g.state === 'pre' ? ' 🔒' : '') + '</span></div>'
-      + '<div class="teams">' + teamBtn(g, 'away', mine) + teamBtn(g, 'home', mine) + '</div>'
+    h += '<div class="game' + (g === tbg ? ' tnf' : '') + '"><div class="game-head">' + statusText(g)
+      + '<span>' + (g === tbg ? '<span class="tag">Tiebreaker</span>' : '') + (isLocked(g) && g.state === 'pre' ? ' 🔒' : '') + '</span></div>'
+      + '<div class="teams">' + teamBtn(g, 'away', mine, open) + teamBtn(g, 'home', mine, open) + '</div>'
       + (late ? '<div class="locknote">This pick was saved after kickoff, so it doesn’t count.</div>' : '')
-      + (fbOn && S.user && isLocked(g) && !mine ? '<div class="locknote">No pick made — locked.</div>' : '')
+      + (open && isLocked(g) && !mine ? '<div class="locknote">No pick made — locked.</div>' : '')
       + '</div>';
   });
   h += '</div>';
   $('tab-picks').innerHTML = h;
-  const inp = $('tbInput');
-  if (inp && hadFocus && !inp.disabled) inp.focus();
-  if (focusN && $('nameBox')) $('nameBox').focus();
+  [['loginName', ln], ['loginPhone', lp], ['nameBox', nb], ['tbInput', tb]].forEach(([id, k]) => { if (k.focus && $(id) && !$(id).disabled) $(id).focus(); });
 }
 
 const logoImg = (t, cls) => (t.logo ? '<img class="' + (cls || 'lg') + '" src="' + esc(t.logo) + '" alt="" loading="lazy">' : '');
 const teamBy = (g, abbr) => (g.home.abbr === abbr ? g.home : g.away.abbr === abbr ? g.away : null);
+const isMe = (uid) => !!(S.user && uid === S.user.uid);
+function paidCell(w, r) {
+  const st = statusOf(w, r.uid);
+  if (st.confirmed) return '<td class="tot paid ok" title="Blake confirmed">✓</td>';
+  return '<td class="tot paid' + (r.paid ? '' : ' no') + '" title="' + (r.paid ? 'Says they paid — not confirmed yet' : 'Hasn’t checked the paid box') + '">' + (r.paid ? 'said' : '✗') + '</td>';
+}
+function adminCell(r) {
+  const st = statusOf(S.week, r.uid);
+  return '<td class="adm"><button class="btn sm' + (st.confirmed ? '' : ' ghost') + '" data-act="confirm" data-u="' + esc(r.uid) + '" data-on="' + (st.confirmed ? '0' : '1') + '">' + (st.confirmed ? 'Paid ✓' : 'Mark paid') + '</button> '
+    + '<button class="btn sm ghost" data-act="remove" data-u="' + esc(r.uid) + '" data-on="1">Remove</button></td>';
+}
 // Week spreadsheet: one row per player (sorted by rank), one column per game.
 // Green = right, red = wrong, light tint = live game currently winning/losing.
 function weekSheetHtml(games, sc) {
-  const sheets = S.docs.filter((d) => d.week === S.week);
-  const tnf = sc.tnf;
-  const tnfLocked = tnf && isLocked(tnf);
-  let h = '<div class="tablewrap"><table class="sheet"><thead><tr><th class="rank">#</th><th class="name">Player</th><th class="tot">W</th><th class="tot">L</th>';
+  const tbg = sc.tbg;
+  const tbLocked = tbg && isLocked(tbg);
+  let h = '<div class="tablewrap"><table class="sheet"><thead><tr><th class="rank">#</th><th class="name">Player</th><th class="tot">W</th><th class="tot">L</th><th class="tot">Paid</th>';
   games.forEach((g) => {
     const sc2 = g.state !== 'pre' && g.away.score != null ? g.away.score + '-' + g.home.score : '';
-    h += '<th class="gh' + (g === tnf ? ' tbcol' : '') + '"><span class="ghl">' + logoImg(g.away) + '<span>@</span>' + logoImg(g.home) + '</span>'
+    h += '<th class="gh' + (g === tbg ? ' tbcol' : '') + '"><span class="ghl">' + logoImg(g.away) + '<span>@</span>' + logoImg(g.home) + '</span>'
       + esc(g.away.abbr) + ' @ ' + esc(g.home.abbr)
       + '<small class="' + (isLive(g) ? 'live' : '') + '">' + esc(sc2 ? (g.final ? 'F ' : '') + sc2 : etDay(g.kick)) + '</small></th>';
   });
-  h += '<th class="tot">TB</th><th class="tot">Off</th></tr></thead><tbody>';
+  h += '<th class="tot">TB</th><th class="tot">Off</th>' + (S.admin ? '<th>Commissioner</th>' : '') + '</tr></thead><tbody>';
   sc.rows.forEach((r) => {
-    const d = sheets.find((x) => x.uid === r.uid);
-    const me = S.user && r.uid === S.user.uid;
+    const d = S.docs.find((x) => x.uid === r.uid && x.week === S.week);
+    const me = isMe(r.uid);
     const won = sc.winners.includes(r.uid);
     h += '<tr class="' + (me ? 'mine' : '') + (won ? ' won' : '') + '"><td class="rank">' + (won ? '🏆' : r.rank) + '</td><td class="name">' + esc(nameOf(r.uid)) + '</td>'
-      + '<td class="tot w">' + r.w + '</td><td class="tot l">' + r.l + '</td>';
+      + '<td class="tot w">' + r.w + '</td><td class="tot l">' + r.l + '</td>' + paidCell(S.week, r);
     games.forEach((g) => {
       const p = d && d.picks[g.id];
       if (!p) { h += '<td class="c none">–</td>'; return; }
@@ -453,11 +547,16 @@ function weekSheetHtml(games, sc) {
       }
       h += '<td class="c ' + cls + '" title="' + esc(pt ? pt.full : p.team) + '">' + (pt ? logoImg(pt) : '') + '<span>' + esc(p.team) + '</span></td>';
     });
-    const tbShow = r.tb != null && (me || tnfLocked);
-    h += '<td class="tot">' + (r.tb == null ? '–' : tbShow ? r.tb : '🔒') + '</td><td class="tot">' + (r.diff == null ? '–' : r.diff) + '</td></tr>';
+    const tbShow = r.tb != null && (me || tbLocked || S.admin);
+    h += '<td class="tot">' + (r.tb == null ? '–' : tbShow ? r.tb : '🔒') + '</td><td class="tot">' + (r.diff == null ? '–' : r.diff) + '</td>' + (S.admin ? adminCell(r) : '') + '</tr>';
   });
   h += '</tbody></table></div>';
   return h;
+}
+function removedHtml() {
+  const out = S.docs.filter((d) => d.week === S.week && isRemoved(S.week, d.uid));
+  if (!S.admin || !out.length) return '';
+  return '<div class="removed"><b>Removed this week:</b> ' + out.map((d) => esc(nameOf(d.uid)) + ' <button class="btn sm ghost" data-act="remove" data-u="' + esc(d.uid) + '" data-on="0">Restore</button>').join(' · ') + '</div>';
 }
 // Season spreadsheet: one row per player, a column of right picks for each week.
 function seasonSheetHtml() {
@@ -470,7 +569,7 @@ function seasonSheetHtml() {
   weeks.forEach((w) => { h += '<th class="tot">Wk ' + w + '</th>'; });
   h += '</tr></thead><tbody>';
   rows.forEach((r) => {
-    const me = S.user && r.uid === S.user.uid;
+    const me = isMe(r.uid);
     const pct = r.w + r.l ? (r.w / (r.w + r.l)).toFixed(3).replace(/^0/, '') : '–';
     h += '<tr class="' + (me ? 'mine' : '') + '"><td class="rank">' + r.rank + '</td><td class="name">' + esc(nameOf(r.uid)) + '</td>'
       + '<td class="tot w">' + r.w + '</td><td class="tot l">' + r.l + '</td><td class="tot">' + pct + '</td><td class="tot">' + (r.won || '–') + '</td>';
@@ -501,12 +600,12 @@ function renderBoard(games) {
     const sc = scoreWeek(S.week);
     const live = games.some(isLive);
     h += '<div class="card"><h3>Week ' + S.week + (sc.done ? ' · Final' : live ? ' · Live' : '') + '</h3>';
-    if (sc.tnf) h += '<div class="muted" style="font-size:13px;margin-bottom:8px">Tiebreaker: ' + esc(sc.tnf.away.name + ' @ ' + sc.tnf.home.name) + ' total points' + (sc.tnfTotal != null ? ' — <b style="color:#fff">' + sc.tnfTotal + (sc.tnf.final ? ' final' : ' so far') + '</b>' : '') + '</div>';
+    if (sc.tbg) h += '<div class="muted" style="font-size:13px;margin-bottom:8px">Tiebreaker (MNF): ' + esc(matchup(sc.tbg)) + ' total points' + (sc.tbTotal != null ? ' — <b style="color:#fff">' + sc.tbTotal + (sc.tbg.final ? ' final' : ' so far') + '</b>' : '') + '</div>';
     if (sc.winners.length) h += '<div class="notice" style="margin-bottom:10px">🏆 Week ' + S.week + ' winner' + (sc.winners.length > 1 ? 's' : '') + ': <b>' + sc.winners.map((u) => esc(nameOf(u))).join(', ') + '</b></div>';
     if (!sc.rows.length) h += '<div class="empty">No picks in yet for this week.</div>';
     else h += weekSheetHtml(games, sc)
-      + '<div class="legend"><span><i class="right"></i>Right</span><span><i class="wrong"></i>Wrong</span><span><i class="up"></i>Winning now</span><span><i class="down"></i>Losing now</span><span>🔒 hidden until kickoff</span></div>';
-    h += '</div>';
+      + '<div class="legend"><span><i class="right"></i>Right</span><span><i class="wrong"></i>Wrong</span><span><i class="up"></i>Winning now</span><span><i class="down"></i>Losing now</span><span>🔒 hidden until kickoff</span><span>Paid: ✓ confirmed by Blake · “said” = checked the box</span></div>';
+    h += removedHtml() + '</div>';
   } else {
     h += '<div class="card"><h3>' + S.season + ' Season</h3>' + seasonSheetHtml() + '</div>';
   }

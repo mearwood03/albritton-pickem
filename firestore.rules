@@ -2,32 +2,58 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // The commissioner. Keep the same as "commissioner" in config.js (lowercase).
+    // email_verified means he clicked the link Firebase emailed him, so nobody
+    // else can make an account with his address and get these powers.
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == 'blakealbritton6@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
     // Leaderboard names. Anyone can read; each player sets only their own.
     match /players/{uid} {
       allow read: if true;
-      allow create, update: if request.auth != null && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['name', 'updatedAt'])
-        && request.resource.data.name is string
-        && request.resource.data.name.size() > 0
-        && request.resource.data.name.size() <= 30;
+      allow create, update: if (request.auth != null && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['name', 'updatedAt'])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 30)
+        || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Commissioner's marks per player per week, id "<season>-<week>_<uid>":
+    //   confirmed = Blake saw the payment, removed = taken out of that week.
+    match /status/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // One pick sheet per player per week, id "<season>-<week>_<uid>".
-    //   g_<gameId>  = team picked,   at_<gameId> = server time it was picked
-    //   tb          = tiebreaker,    at_tb       = server time it was set
-    // Every save changes exactly one game (or the tiebreaker), named in "last",
-    // and must stamp it with the server's clock. The site ignores any pick
-    // stamped after kickoff, so a late change can't count.
+    //   g_<gameId> = team picked,       at_<gameId> = server time it was picked
+    //   tb         = tiebreaker,        at_tb       = server time it was set
+    //   paid       = "I've paid" box,   at_paid     = server time it was ticked
+    // Every save changes exactly one thing, named in "last", and must stamp it
+    // with the server's clock. The site ignores any pick stamped after kickoff,
+    // so a late change can't count. Removed players can't save.
     match /picks/{id} {
       allow read: if true;
-      allow create, update: if validSheet(id);
-      allow delete: if false;
+      allow create, update: if validSheet(id) && !removed(id);
+      allow delete: if isAdmin();
+    }
+
+    function removed(id) {
+      let st = /databases/$(database)/documents/status/$(id);
+      return exists(st) && get(st).data.get('removed', false) == true;
     }
 
     function validSheet(id) {
       let d = request.resource.data;
       let k = d.last;
-      let changed = k == 'tb' ? ['last', 'tb', 'at_tb'] : ['last', 'g_' + k, 'at_' + k];
+      let changed = k == 'tb' ? ['last', 'tb', 'at_tb']
+        : k == 'paid' ? ['last', 'paid', 'at_paid']
+        : ['last', 'g_' + k, 'at_' + k];
       return request.auth != null
         && d.uid == request.auth.uid
         && d.season is int && d.week is int && d.week >= 1 && d.week <= 25
@@ -35,9 +61,9 @@ service cloud.firestore {
         && id == d.wk + '_' + request.auth.uid
         && k is string && k.size() > 0 && k.size() <= 20
         && d['at_' + k] == request.time
-        && (k == 'tb'
-              ? d.tb is int && d.tb >= 0 && d.tb <= 200
-              : d['g_' + k] is string && d['g_' + k].size() > 0 && d['g_' + k].size() <= 5)
+        && (k == 'tb' ? d.tb is int && d.tb >= 0 && d.tb <= 200
+            : k == 'paid' ? d.paid is bool
+            : d['g_' + k] is string && d['g_' + k].size() > 0 && d['g_' + k].size() <= 5)
         && (resource == null
               ? d.keys().hasOnly(['uid', 'season', 'week', 'wk'].concat(changed))
               : d.diff(resource.data).affectedKeys().hasOnly(changed));

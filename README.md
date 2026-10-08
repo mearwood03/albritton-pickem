@@ -1,91 +1,80 @@
 # Albritton's Pick Em's
 
 Weekly NFL pick'em: pick the winner of every game, and guess the total points of
-Thursday Night Football as the tiebreaker. In Broncos colors, with a Venmo button
+Monday Night Football as the tiebreaker. In Broncos colors, with a Venmo button
 for **@Blakealbritton6** ($21 entry).
 
-- **My Picks** — type your name (it's what the leaderboard shows), then tap a team
-  to pick it (saves right away). Games run top to bottom with each team's logo,
-  name and record. Each game locks at its own kickoff; the TNF tiebreaker locks
-  when TNF kicks off.
+- **My Picks** — type your name and phone number (no Google sign-in), check
+  "I've paid my $21", then tap a team in each game. Picks save as you tap and each
+  game locks at its own kickoff; the MNF tiebreaker locks when MNF kicks off. Come
+  back from any phone with the same number to change picks. Phone numbers are
+  never shown on the site.
 - **Leaderboard** — a spreadsheet of every player, auto-sorted by rank, with a column
   per game: green cell = right, red = wrong, light green/red = winning/losing live.
-  Other people's picks stay hidden until that game kicks off. Includes W/L totals and
-  the tiebreaker; a Season view shows each player's record week by week. Live
-  scores sit underneath.
+  Other people's picks stay hidden until that game kicks off. Shows W/L, paid status
+  and the tiebreaker; a Season view shows each player's record week by week.
 
 Scores, logos, records and team names come from ESPN's public NFL feed and refresh
 automatically: every 30 seconds while games are on, every 5 minutes otherwise.
-Picks update live for everyone the moment they're saved.
 
 ## Rules the site uses
 - Most correct picks wins the week.
-- Tie on picks → closest to the actual TNF total points (over or under) wins.
-  On Thanksgiving week the tiebreaker is the Thursday **night** game.
+- Tie on picks → closest to the actual total points of the week's last game
+  (Monday Night Football; the later one if there are two) wins.
 - A tied NFL game, or a postponed one, counts for nobody.
 - Every pick is stamped with Google's server clock. A pick saved after kickoff
-  shows as "late" and doesn't count, even if someone tampers with their phone's clock.
+  shows as "late" and doesn't count.
+- Players must check "I've paid" before they can pick.
 
-## Publishing it (Firebase + Vercel, about 20 minutes, all free)
+## Commissioner (Blake)
+Tap **Commissioner** at the bottom of the site and log in with
+blakealbritton6@gmail.com.
+- **First time:** type a password and tap **First time? Create the account**. Firebase
+  emails a link to that address. Click it, come back and **Sign in**.
+- On the **Leaderboard** tab each player gets **Mark paid** (shows a green ✓ in the
+  Paid column) and **Remove** (their picks stop counting that week and they can't
+  pick). Removed players are listed under the table with a **Restore** button.
+- "said" in the Paid column means the player checked the box but Blake hasn't
+  confirmed it yet.
+- Logging in as commissioner logs that phone out of its player picks. Tap **Sign out**
+  and enter your name + phone again to pick.
 
-Firebase stores the picks and handles Google sign-in. Vercel hosts the website.
+## Setup (Firebase + Vercel)
 
-### Part 1: Firebase
-1. Go to https://console.firebase.google.com, sign in with your Google account and click
-   **Create a project**. Name it `albritton-pickem`. Google Analytics can stay off.
-   Click **Create project**, then **Continue**.
-2. **Turn on Google sign-in:** in the left menu, **Build → Authentication → Get started**.
-   Under **Sign-in method**, click **Google** → switch **Enable** on → pick your email as the
-   support email → **Save**.
-3. **Create the database:** **Build → Firestore Database → Create database**. Pick a
-   US location (e.g. `nam5`) → **Next** → **Start in production mode** → **Create**.
-4. **Lock it down:** in Firestore, open the **Rules** tab, delete what's there, paste
-   everything from `firestore.rules`, and click **Publish**.
-5. **Get your site keys:** click the gear (top left) → **Project settings**. Under
-   **Your apps**, click the **</>** (Web) icon, name it `pickem`, leave "Firebase Hosting"
-   unchecked, click **Register app**. Firebase shows a block like
-   `const firebaseConfig = { apiKey: "...", authDomain: "...", ... }`.
-6. Open `config.js` and paste each value over the matching `PASTE...` placeholder
-   (apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId). Save and commit.
-   These keys are safe to have in public code. The rules from step 4 are what protect the data.
+### Firebase
+1. **Turn on logins:** Firebase console → **Security → Authentication → Sign-in method**
+   → **Email/Password** → switch **Enable** on (leave "Email link" off) → **Save**.
+   (Players never see email or passwords — the site uses their phone number behind the
+   scenes. Google sign-in isn't used and can stay off.)
+2. **Database:** **Databases & Storage → Firestore Database → Create database** (production
+   mode, US location).
+3. **Rules:** Firestore → **Rules** tab → replace everything with `firestore.rules` →
+   **Publish**. Publish again any time this file changes.
+4. The Firebase keys are already in `config.js`.
 
-### Part 2: Vercel
-1. Go to https://vercel.com and **Sign up with GitHub** (the free Hobby plan is fine).
-2. Click **Add New… → Project**. Find `albritton-pickem` and click **Import**.
-   If it isn't listed, click **Adjust GitHub App Permissions** and give Vercel access to it.
-3. On the setup screen:
-   - **Project Name:** `albritton-pickem` (this becomes `albritton-pickem.vercel.app`)
-   - **Framework Preset:** `Other`
-   - **Root Directory:** leave as `./`
-   - Leave Build and Output settings empty.
-4. Click **Deploy**. When it finishes, copy your site address (e.g. `albritton-pickem.vercel.app`).
-5. From then on, every push to the `main` branch redeploys the site automatically
-   within about a minute.
-
-### Part 3: Connect the two (sign-in won't work until you do this)
-1. Back in Firebase: **Authentication → Settings → Authorized domains → Add domain**.
-2. Paste your Vercel address **without** `https://` (e.g. `albritton-pickem.vercel.app`) → **Add**.
-3. If you add a custom domain in Vercel later, add that domain here too.
-
-### Part 4: Test it, then send the link
-1. Open your Vercel address. You should see this week's games with logos and records.
-2. Click **Sign in**, choose your Google account, and type your name in the **Your name** box.
-3. Make a pick, then open the **Leaderboard** tab and check that your row shows up.
-4. Send the link to the group. Everyone signs in with Google, adds their name, and picks.
+### Vercel
+1. https://vercel.com → **Add New… → Project** → **Import** `albritton-pickem`.
+2. **Framework Preset:** `Other`. **Root Directory:** `./`. Leave build settings empty →
+   **Deploy**.
+3. Every push to `main` redeploys within about a minute.
+4. Optional: add your `.vercel.app` address in Firebase under **Authentication →
+   Settings → Authorized domains** (needed only if you ever turn Google sign-in on).
 
 ### If something goes wrong
-- **"Picks aren't switched on yet" banner:** `config.js` still has a `PASTE` value in it.
-- **Sign-in pop-up closes with an error (`auth/unauthorized-domain`):** the Vercel address
-  is missing from Firebase's Authorized domains (Part 3).
-- **Picks won't save:** the Firestore rules weren't published (Part 1, step 4).
-- **Old version showing:** make sure your latest change is on the `main` branch.
+- **"Logins aren't switched on yet":** Email/Password isn't enabled (Firebase step 1).
+- **Picks won't save:** the rules aren't published (Firebase step 3), or Blake removed
+  that player for the week.
+- **Commissioner buttons don't show:** Blake hasn't clicked the verification email yet.
+- **Someone changed phones/numbers:** they just enter the new number — it starts a fresh
+  entry. Blake can remove the old one.
 
 ## Changing things
 - Venmo tag or entry fee text: `config.js`.
-- Fixing a player's name or removing a test player: Firebase console → Firestore →
-  `players` (names) and `picks` (one doc per player per week).
+- Fixing a player's name or deleting a test player: Firebase console → Firestore →
+  `players` (names), `picks` (one doc per player per week), `status` (Blake's paid /
+  removed marks).
 
 ## Files
 - `index.html`, `style.css`, `app.js` — the site
-- `config.js` — Firebase keys, Venmo tag, entry fee
-- `firestore.rules` — who can change what (each player only their own picks)
+- `config.js` — Firebase keys, Venmo tag, entry fee, commissioner email
+- `firestore.rules` — who can change what (each player only their own picks; only Blake marks paid / removes)

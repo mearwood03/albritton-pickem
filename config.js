@@ -12,5 +12,7 @@ window.PICKEM_CONFIG = {
   },
   venmo: "Blakealbritton6",
   // Shown next to the Venmo button. Leave "" to hide.
-  entryFee: "$21 entry"
+  entryFee: "$21 entry",
+  // Commissioner login (can mark who paid and remove people). Must match firestore.rules.
+  commissioner: "blakealbritton6@gmail.com"
 };

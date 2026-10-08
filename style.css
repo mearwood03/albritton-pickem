@@ -199,3 +199,27 @@ tr.mine td.name { background: #28334f; }
 .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -2px; }
 .legend i.right { background: #1f8f55; } .legend i.wrong { background: #b8343a; }
 .legend i.up { background: rgba(52, 199, 123, .45); } .legend i.down { background: rgba(255, 90, 95, .45); }
+
+/* name + phone login, paid box, commissioner */
+.login { max-width: 620px; margin: 0 auto 12px; border-color: var(--orange); }
+.login p { margin: 0 0 12px; font-size: 13px; }
+.fields { display: flex; gap: 8px; flex-wrap: wrap; }
+.fields input { flex: 1 1 160px; min-width: 0; background: var(--navy); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 16px; }
+.fields .btn { flex: 1 1 100%; padding: 11px 16px; font-size: 16px; }
+@media (min-width: 560px) { .fields .btn { flex: 0 0 auto; } }
+.paidcard { display: flex; align-items: flex-start; gap: 12px; max-width: 620px; margin: 0 auto 12px; cursor: pointer; border-color: var(--orange); }
+.paidcard.on { border-color: var(--win); }
+.paidcard input { width: 22px; height: 22px; margin: 2px 0 0; accent-color: var(--win); flex: none; cursor: pointer; }
+.paidcard > span { display: flex; flex-direction: column; font-size: 14px; }
+.paidcard .muted { font-size: 12px; }
+.paidcard a { color: #7cc4ff; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; font-size: 12px; }
+.modal-card input + input { margin-top: 8px; }
+.modal-card .links { margin: 12px 0 0; font-size: 12px; }
+.modal-card .msg { margin: 8px 0 0; font-size: 13px; min-height: 1em; }
+.sheet td.paid { font-family: Inter, sans-serif; font-size: 12px; color: var(--muted); }
+.sheet td.paid.ok { color: #7ee2a8; font-weight: 700; font-size: 15px; }
+.sheet td.paid.no { color: #ff9a9d; }
+.sheet td.adm { white-space: nowrap; }
+.removed { margin-top: 12px; font-size: 13px; color: var(--muted); }
+.removed b { color: #fff; }
