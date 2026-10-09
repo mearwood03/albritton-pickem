@@ -238,19 +238,20 @@ tr.mine td.name { background: #28334f; }
 .sheet th.gh small.st.live { color: var(--orange); font-weight: 700; }
 .sheet th.gh small.st.fin { color: #7ee2a8; font-weight: 700; }
 
-/* logo + backlit title */
-.logo { height: 100px; width: auto; flex: none; filter: drop-shadow(0 0 10px rgba(251, 79, 20, .45)); }
+/* logo + 3D title */
+.logo { height: 100px; width: auto; flex: none; }
 h1 {
   font-size: 40px; font-weight: 800; letter-spacing: .05em; color: #fff;
+  -webkit-text-stroke: 1.5px #000;
+  paint-order: stroke fill;
+  /* stacked black layers = solid 3D block letters */
   text-shadow:
-    0 0 1px #fff,
-    0 0 8px rgba(255, 140, 90, .9),
-    0 0 18px rgba(251, 79, 20, .85),
-    0 0 36px rgba(251, 79, 20, .6),
-    0 0 64px rgba(251, 79, 20, .4),
-    0 3px 0 #000e1f;
+    1px 1px 0 #000, 2px 2px 0 #000, 3px 3px 0 #000, 4px 4px 0 #000,
+    5px 5px 0 #000, 6px 6px 0 #000, 7px 7px 0 #000,
+    8px 9px 6px rgba(0, 0, 0, .55);
 }
 @media (max-width: 560px) {
   .logo { height: 68px; }
-  h1 { font-size: 22px; letter-spacing: .03em; }
+  h1 { font-size: 22px; letter-spacing: .03em; -webkit-text-stroke-width: 1px;
+    text-shadow: 1px 1px 0 #000, 2px 2px 0 #000, 3px 3px 0 #000, 4px 4px 0 #000, 5px 6px 4px rgba(0, 0, 0, .5); }
 }
