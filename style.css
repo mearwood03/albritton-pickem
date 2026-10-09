@@ -237,3 +237,20 @@ tr.mine td.name { background: #28334f; }
 .sheet th.gh small.st { display: block; margin-top: 3px; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .sheet th.gh small.st.live { color: var(--orange); font-weight: 700; }
 .sheet th.gh small.st.fin { color: #7ee2a8; font-weight: 700; }
+
+/* logo + backlit title */
+.logo { height: 100px; width: auto; flex: none; filter: drop-shadow(0 0 10px rgba(251, 79, 20, .45)); }
+h1 {
+  font-size: 40px; font-weight: 800; letter-spacing: .05em; color: #fff;
+  text-shadow:
+    0 0 1px #fff,
+    0 0 8px rgba(255, 140, 90, .9),
+    0 0 18px rgba(251, 79, 20, .85),
+    0 0 36px rgba(251, 79, 20, .6),
+    0 0 64px rgba(251, 79, 20, .4),
+    0 3px 0 #000e1f;
+}
+@media (max-width: 560px) {
+  .logo { height: 68px; }
+  h1 { font-size: 22px; letter-spacing: .03em; }
+}
