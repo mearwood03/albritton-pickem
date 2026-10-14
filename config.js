@@ -13,6 +13,8 @@ window.PICKEM_CONFIG = {
   venmo: "Blakealbritton6",
   // Shown next to the Venmo button. Leave "" to hide.
   entryFee: "$21 entry",
+  // Tuesday that Week 1 starts (Eastern). The site opens on the current week and turns over each Tuesday.
+  week1Start: "2026-09-08",
   // Commissioner login (can mark who paid and remove people). Must match firestore.rules.
   commissioner: "blakealbritton6@gmail.com"
 };

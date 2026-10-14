@@ -4,11 +4,12 @@ Weekly NFL pick'em: pick the winner of every game, and guess the total points of
 Monday Night Football as the tiebreaker. In Broncos colors, with a Venmo button
 for **@Blakealbritton6** ($21 entry).
 
-- **My Picks** — type your name and phone number (no Google sign-in), check
-  "I've paid my $21", then tap a team in each game. Picks save as you tap and each
-  game locks at its own kickoff; the MNF tiebreaker locks when MNF kicks off. Come
-  back from any phone with the same number to change picks. Phone numbers are
-  never shown on the site.
+- **My Picks** — opens on the current week (Week 1 starts on `week1Start` in
+  `config.js` and each week turns over on Tuesday). Type your name and phone number
+  (no Google sign-in), check "I've paid my $21", tap a team in every game, then enter
+  the tiebreaker right under the Monday Night Football game, and tap **Save my picks**
+  — one button saves everything. Each game locks at its own kickoff. Come back from any
+  phone with the same number to change picks. Phone numbers are never shown on the site.
 - **Leaderboard** — a spreadsheet of every player, auto-sorted by rank, with a column
   per game: green cell = right, red = wrong, light green/red = winning/losing live.
   Other people's picks stay hidden until that game kicks off. Shows W/L, paid status

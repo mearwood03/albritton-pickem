@@ -19,6 +19,7 @@ const S = {
   season: null, curWeek: null, week: null,
   sb: {}, // week -> games[]
   tab: 'picks', boardView: 'week', updated: 0, ready: false, busy: false,
+  drafts: {}, draftName: null, saving: false, // unsaved changes, kept until the one Save button
 };
 try { S.tab = localStorage.getItem('ape:tab') === 'board' ? 'board' : 'picks'; } catch (e) {}
 
@@ -137,50 +138,69 @@ async function playerLogin(name, phone) {
 }
 async function logout() { await auth.signOut(); S.user = null; S.admin = false; render(); }
 
-/* ---------------- saving picks ---------------- */
-function canPick() {
-  if (!S.user) { toast('Enter your name and phone number first.'); return false; }
-  if (isRemoved(S.week, S.user.uid)) { toast('Blake removed you from this week. Text him if that’s a mistake.'); return false; }
-  const sh = mySheet(S.week);
-  if (!(sh && sh.paid)) { toast('Check the “I’ve paid” box first.'); return false; }
-  return true;
-}
+/* ---------------- picks: edit freely, then one Save ---------------- */
 const sheetBase = () => ({ uid: S.user.uid, season: S.season, week: S.week, wk: wkKey(S.week) });
-async function savePick(g, team) {
-  if (!canPick()) return;
+const draft = (w) => S.drafts[w] || (S.drafts[w] = { picks: {}, tb: null, paid: null });
+const savedName = () => (S.user && S.players[S.user.uid] && S.players[S.user.uid].name) || '';
+function changeCount(w) {
+  const d = S.drafts[w];
+  let n = S.draftName != null && S.draftName.trim() !== savedName() ? 1 : 0;
+  if (d) n += Object.keys(d.picks).length + (d.tb != null ? 1 : 0) + (d.paid != null ? 1 : 0);
+  return n;
+}
+function tapPick(g, team) {
+  if (!S.user) return toast('Enter your name and phone number first.');
+  if (isRemoved(S.week, S.user.uid)) return toast('Blake removed you from this week. Text him if that’s a mistake.');
   if (isLocked(g)) return toast('That game has started — picks are locked.');
-  const k = String(g.id);
-  try {
-    await sheetRef(S.week).set(Object.assign(sheetBase(), { last: k, ['g_' + k]: team, ['at_' + k]: FV.serverTimestamp() }), { merge: true });
-  } catch (e) { console.warn(e); toast('Couldn’t save that pick. Try again.' + why(e)); }
+  const sh = mySheet(S.week);
+  const saved = sh && sh.picks[g.id] && sh.picks[g.id].team;
+  const d = draft(S.week);
+  if (team === saved) delete d.picks[g.id]; else d.picks[g.id] = team;
+  render();
 }
-async function saveTb(val) {
-  if (!canPick()) return;
-  const tbg = tbGame(S.sb[S.week] || []);
-  if (tbg && isLocked(tbg)) return toast('Tiebreaker is locked — MNF has started.');
-  const n = parseInt(val, 10);
-  if (!(n >= 0 && n <= 200)) return toast('Enter total points between 0 and 200.');
+async function saveAll() {
+  if (!S.user || S.saving) return;
+  const w = S.week, d = draft(w), sh = mySheet(w) || {};
+  const games = S.sb[w] || [];
+  const tbg = tbGame(games);
+  const name = (S.draftName != null ? S.draftName : savedName()).trim().replace(/\s+/g, ' ').slice(0, 30);
+  if (!name) return toast('Type your name first.');
+  if (isRemoved(w, S.user.uid)) return toast('Blake removed you from this week. Text him if that’s a mistake.');
+  const paid = d.paid != null ? d.paid : !!sh.paid;
+  if (!paid) return toast('Check the “I’ve paid” box before saving.');
+  let tb = null;
+  if (d.tb != null && String(d.tb).trim() !== '') {
+    tb = parseInt(d.tb, 10);
+    if (!(tb >= 0 && tb <= 200)) return toast('Tiebreaker: enter total points between 0 and 200.');
+  }
+  const ref = sheetRef(w);
+  const one = (fields) => ref.set(Object.assign(sheetBase(), fields), { merge: true });
+  const writes = [];
+  let picks = 0, skipped = 0;
+  if (name !== savedName()) writes.push(db.collection('players').doc(S.user.uid).set({ name, updatedAt: FV.serverTimestamp() }, { merge: true }));
+  if (d.paid != null && d.paid !== !!sh.paid) writes.push(one({ last: 'paid', paid: d.paid, at_paid: FV.serverTimestamp() }));
+  Object.keys(d.picks).forEach((gid) => {
+    const g = games.find((x) => x.id === gid);
+    if (!g || isLocked(g)) { skipped++; return; }
+    writes.push(one({ last: gid, ['g_' + gid]: d.picks[gid], ['at_' + gid]: FV.serverTimestamp() }));
+    picks++;
+  });
+  let tbSaved = false;
+  if (tb != null && tb !== sh.tb) {
+    if (tbg && isLocked(tbg)) skipped++;
+    else { writes.push(one({ last: 'tb', tb, at_tb: FV.serverTimestamp() })); tbSaved = true; }
+  }
+  // One change per write (the rules check each one's server time). They're sent together, in order.
+  S.saving = true; render();
   try {
-    await sheetRef(S.week).set(Object.assign(sheetBase(), { last: 'tb', tb: n, at_tb: FV.serverTimestamp() }), { merge: true });
-    if ($('tbInput')) $('tbInput').dataset.dirty = '';
-    toast('Tiebreaker saved: ' + n + ' points');
-  } catch (e) { console.warn(e); toast('Couldn’t save the tiebreaker. Try again.' + why(e)); }
+    await Promise.all(writes);
+    S.drafts[w] = { picks: {}, tb: null, paid: null };
+    S.draftName = null;
+    toast(writes.length ? 'Saved! ' + (picks ? picks + ' pick' + (picks > 1 ? 's' : '') : '') + (tbSaved ? (picks ? ' + ' : '') + 'tiebreaker' : '') + (!picks && !tbSaved ? 'Your info is up to date' : '') + (skipped ? ' · ' + skipped + ' skipped (game already started)' : '') : 'Nothing new to save.');
+  } catch (e) { console.warn(e); toast('Couldn’t save. Try again.' + why(e)); }
+  S.saving = false; render();
 }
-async function savePaid(on) {
-  if (!S.user) return;
-  try {
-    await sheetRef(S.week).set(Object.assign(sheetBase(), { last: 'paid', paid: !!on, at_paid: FV.serverTimestamp() }), { merge: true });
-  } catch (e) { console.warn(e); toast('Couldn’t save that. Try again.' + why(e)); render(); }
-}
-async function saveName(raw) {
-  const name = String(raw || '').trim().replace(/\s+/g, ' ').slice(0, 30);
-  if (!name || !S.user) return toast('Type your name first.');
-  try {
-    await db.collection('players').doc(S.user.uid).set({ name, updatedAt: FV.serverTimestamp() }, { merge: true });
-    if ($('nameBox')) $('nameBox').dataset.dirty = '';
-    toast('Name saved: ' + name);
-  } catch (e) { console.warn(e); toast('Couldn’t save your name. Try again.' + why(e)); }
-}
+window.addEventListener('beforeunload', (e) => { if (S.ready && S.user && changeCount(S.week)) { e.preventDefault(); e.returnValue = ''; } });
 
 /* ---------------- commissioner ---------------- */
 function openAdmin() {
@@ -268,13 +288,20 @@ async function fetchJSON(url) {
   if (!r.ok) throw new Error('ESPN ' + r.status);
   return r.json();
 }
+// The pick'em week: Week 1 starts the Tuesday in config.js (week1Start), and each week turns over the
+// next Tuesday (after Monday Night Football). Returns null if that date isn't set for this season.
+function weekByDate() {
+  const start = Date.parse((CFG.week1Start || '') + 'T06:00:00-04:00'); // early Tuesday, Eastern
+  if (!start || (S.season && new Date(start).getFullYear() !== S.season)) return null;
+  return Math.max(1, Math.min(WEEKS, Math.floor((Date.now() - start) / (7 * 864e5)) + 1));
+}
 async function loadCurrent() {
   const d = await fetchJSON(ESPN);
   S.season = (d.season && d.season.year) || (d.leagues && d.leagues[0] && d.leagues[0].season && d.leagues[0].season.year) || new Date().getFullYear();
   const type = d.season && d.season.type;
   const n = (d.week && d.week.number) || 1;
-  S.curWeek = type === 2 ? Math.min(n, WEEKS) : type === 1 ? 1 : WEEKS;
-  if (type === 2) { S.sb[S.curWeek] = (d.events || []).map(norm).sort(byKick); S.updated = Date.now(); }
+  S.curWeek = weekByDate() || (type === 2 ? Math.min(n, WEEKS) : type === 1 ? 1 : WEEKS);
+  if (type === 2) { S.sb[Math.min(n, WEEKS)] = (d.events || []).map(norm).sort(byKick); S.updated = Date.now(); }
 }
 const byKick = (a, b) => a.kick - b.kick || a.id.localeCompare(b.id);
 const cacheKey = (w) => 'ape:sb2:' + S.season + ':' + w;
@@ -401,9 +428,8 @@ document.addEventListener('click', (e) => {
   else if (act === 'admin') openAdmin();
   else if (act === 'pick') {
     const g = (S.sb[S.week] || []).find((x) => x.id === a.dataset.g);
-    if (g) savePick(g, a.dataset.t);
-  } else if (act === 'tb') saveTb($('tbInput').value);
-  else if (act === 'savename') saveName($('nameBox').value);
+    if (g) tapPick(g, a.dataset.t);
+  } else if (act === 'save') saveAll();
   else if (act === 'bv') { S.boardView = a.dataset.v; render(); }
   else if (act === 'confirm') setStatus(a.dataset.u, { confirmed: a.dataset.on === '1' });
   else if (act === 'remove') {
@@ -411,21 +437,33 @@ document.addEventListener('click', (e) => {
     if (!on || confirm('Remove ' + nameOf(a.dataset.u) + ' from Week ' + S.week + '? Their picks stop counting and they can’t pick until you restore them.')) setStatus(a.dataset.u, { removed: on });
   }
 });
-document.addEventListener('change', (e) => { if (e.target.id === 'paidBox') savePaid(e.target.checked); });
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'paidBox' || !S.user) return;
+  const sh = mySheet(S.week);
+  draft(S.week).paid = e.target.checked === !!(sh && sh.paid) ? null : e.target.checked;
+  render();
+});
 document.addEventListener('input', (e) => {
-  if (['tbInput', 'nameBox', 'loginName', 'loginPhone'].includes(e.target.id)) e.target.dataset.dirty = '1';
+  const id = e.target.id;
+  if (id === 'loginName' || id === 'loginPhone') e.target.dataset.dirty = '1';
+  else if (id === 'nameBox') { S.draftName = e.target.value; updateSaveBar(); }
+  else if (id === 'tbInput') {
+    const sh = mySheet(S.week);
+    draft(S.week).tb = e.target.value === String(sh && sh.tb != null ? sh.tb : '') ? null : e.target.value;
+    updateSaveBar();
+  }
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
-  if (e.target.id === 'tbInput') saveTb(e.target.value);
-  else if (e.target.id === 'nameBox') saveName(e.target.value);
-  else if (e.target.id === 'loginName' || e.target.id === 'loginPhone') playerLogin($('loginName').value, $('loginPhone').value);
+  if (e.target.id === 'loginName' || e.target.id === 'loginPhone') playerLogin($('loginName').value, $('loginPhone').value);
+  else if (e.target.id === 'tbInput' || e.target.id === 'nameBox') e.target.blur();
 });
 
 function teamBtn(g, side, mine, open) {
   const t = g[side];
   const win = winnerOf(g);
   const picked = mine && mine.team === t.abbr;
+  const unsaved = picked && mine.draft;
   const cls = ['team'];
   if (picked) { cls.push('picked'); if (win && win !== 'TIE') cls.push(win === t.abbr ? 'right' : 'wrong'); }
   if (win && win !== 'TIE' && win !== t.abbr) cls.push('lost');
@@ -435,7 +473,7 @@ function teamBtn(g, side, mine, open) {
     + (t.logo ? '<img src="' + esc(t.logo) + '" alt="" loading="lazy">' : '')
     + '<span class="tx"><span class="abbr">' + esc(t.full || t.name || t.abbr) + '</span>'
     + '<span class="nm">' + esc(t.record || '') + '</span></span>'
-    + (picked ? '<span class="chk">' + (cls.includes('right') ? '✓ Right' : cls.includes('wrong') ? '✗ Wrong' : 'Your pick') + '</span>' : '')
+    + (picked ? '<span class="chk">' + (cls.includes('right') ? '✓ Right' : cls.includes('wrong') ? '✗ Wrong' : unsaved ? 'Not saved yet' : 'Your pick') + '</span>' : '')
     + (showScore ? '<span class="score">' + t.score + '</span>' : '') + '</button>';
 }
 function statusText(g) {
@@ -450,19 +488,32 @@ function keep(id, fallback) {
   return { val: typing ? el.value : fallback, attr: typing ? ' data-dirty="1"' : '', focus: el && document.activeElement === el };
 }
 
+function saveBarHtml() {
+  const n = changeCount(S.week);
+  return '<button class="btn save" id="saveBtn" data-act="save"' + (S.saving ? ' disabled' : '') + '>' + (S.saving ? 'Saving…' : 'Save my picks') + '</button>'
+    + '<div class="savestate' + (n ? ' dirty' : '') + '" id="saveState">' + (n ? n + ' unsaved change' + (n > 1 ? 's' : '') : 'Everything’s saved ✓') + '</div>';
+}
+function updateSaveBar() {
+  const n = changeCount(S.week);
+  const st = $('saveState'); if (st) { st.className = 'savestate' + (n ? ' dirty' : ''); st.textContent = n ? n + ' unsaved change' + (n > 1 ? 's' : '') : 'Everything’s saved ✓'; }
+  const top = $('topDirty'); if (top) top.hidden = !n;
+}
 function renderPicks(games) {
   const tbg = tbGame(games);
   const sheet = mySheet(S.week);
-  const myPicks = (sheet && sheet.picks) || {};
-  const paid = !!(sheet && sheet.paid);
+  const d = draft(S.week);
+  const myPicks = Object.assign({}, (sheet && sheet.picks) || {});
+  Object.keys(d.picks).forEach((gid) => { myPicks[gid] = { team: d.picks[gid], at: 0, draft: true }; });
+  const paid = d.paid != null ? d.paid : !!(sheet && sheet.paid);
   const removed = S.user && isRemoved(S.week, S.user.uid);
-  const open = fbOn && !!S.user && paid && !removed;
+  const open = fbOn && !!S.user && !removed;
   const made = games.filter((g) => myPicks[g.id]).length;
   const nextLock = games.filter((g) => !isLocked(g)).map((g) => g.kick)[0];
   const tbLocked = tbg && isLocked(tbg);
   const ln = keep('loginName', ''), lp = keep('loginPhone', '');
-  const nb = keep('nameBox', S.user ? (S.players[S.user.uid] && S.players[S.user.uid].name) || '' : '');
-  const tb = keep('tbInput', sheet && sheet.tb != null ? sheet.tb : '');
+  const focus = document.activeElement && document.activeElement.id;
+  const nameVal = S.draftName != null ? S.draftName : savedName();
+  const tbVal = d.tb != null ? d.tb : sheet && sheet.tb != null ? sheet.tb : '';
   let h = '';
   if (fbOn && !S.user) {
     h += '<div class="card login"><h3>Make your picks</h3>'
@@ -472,32 +523,40 @@ function renderPicks(games) {
       + '<button class="btn" data-act="login"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? 'One sec…' : 'Start picking') + '</button></div></div>';
   } else if (fbOn) {
     h += '<div class="card namecard"><label for="nameBox"><b>Your name</b><span class="muted">Shown on the leaderboard</span></label>'
-      + '<div class="nameRow"><input id="nameBox" maxlength="30" autocomplete="name" value="' + esc(nb.val) + '"' + nb.attr + '>'
-      + '<button class="btn sm" data-act="savename">Save</button></div></div>';
+      + '<div class="nameRow"><input id="nameBox" maxlength="30" autocomplete="name" value="' + esc(nameVal) + '"></div></div>';
     if (removed) h += '<div class="notice">Blake removed you from Week ' + S.week + '. If you’ve paid, text him and he can add you back.</div>';
     h += '<label class="card paidcard' + (paid ? ' on' : '') + '"><input type="checkbox" id="paidBox"' + (paid ? ' checked' : '') + (removed ? ' disabled' : '') + '>'
-      + '<span><b>I’ve paid my ' + esc(feeAmt || 'entry') + ' for Week ' + S.week + '</b><span class="muted">Venmo <a href="https://venmo.com/u/' + esc(encodeURIComponent(venmo)) + '" target="_blank" rel="noopener">@' + esc(venmo) + '</a>. Required before you can pick.</span></span></label>';
+      + '<span><b>I’ve paid my ' + esc(feeAmt || 'entry') + ' for Week ' + S.week + '</b><span class="muted">Venmo <a href="https://venmo.com/u/' + esc(encodeURIComponent(venmo)) + '" target="_blank" rel="noopener">@' + esc(venmo) + '</a>. Required to save your picks.</span></span></label>';
     h += '<div class="card summary"><div class="progress"><b>' + made + ' of ' + games.length + ' picked</b>'
-      + '<div class="muted" style="font-size:12px">' + (nextLock ? 'Picks save as you tap · each game locks at kickoff · next lock ' + esc(fmtKick(nextLock)) : 'All games are locked for this week') + '</div>'
-      + '<div class="bar"><i style="width:' + Math.round((made / games.length) * 100) + '%"></i></div></div>'
-      + '<div class="tb"><span class="lbl">Tiebreaker (MNF): total points in<br><b>' + (tbg ? esc(matchup(tbg)) : 'MNF') + '</b></span>'
-      + '<input id="tbInput" type="number" inputmode="numeric" min="0" max="200" placeholder="pts" value="' + esc(tb.val) + '"' + tb.attr + (tbLocked || !open ? ' disabled' : '') + '>'
-      + (tbLocked ? '<span class="muted" style="font-size:12px">Locked</span>' : '<button class="btn sm" data-act="tb"' + (open ? '' : ' disabled') + '>Save</button>') + '</div></div>';
+      + '<div class="muted" style="font-size:12px">' + (nextLock ? 'Pick every game, then the MNF tiebreaker, then tap Save at the bottom · each game locks at kickoff · next lock ' + esc(fmtKick(nextLock)) : 'All games are locked for this week') + '</div>'
+      + '<div class="bar"><i style="width:' + Math.round((made / games.length) * 100) + '%"></i></div>'
+      + '<div class="topdirty" id="topDirty"' + (changeCount(S.week) ? '' : ' hidden') + '>You have unsaved changes — tap <b>Save my picks</b> at the bottom.</div></div></div>';
   }
   h += '<div class="games">';
   games.forEach((g) => {
     const mine = myPicks[g.id];
-    const late = mine && mine.at >= g.kick;
+    const late = mine && !mine.draft && mine.at >= g.kick;
     h += '<div class="game' + (g === tbg ? ' tnf' : '') + '"><div class="game-head">' + statusText(g)
-      + '<span>' + (g === tbg ? '<span class="tag">Tiebreaker</span>' : '') + (isLocked(g) && g.state === 'pre' ? ' 🔒' : '') + '</span></div>'
+      + '<span>' + (g === tbg ? '<span class="tag">MNF · Tiebreaker</span>' : '') + (isLocked(g) && g.state === 'pre' ? ' 🔒' : '') + '</span></div>'
       + '<div class="teams">' + teamBtn(g, 'away', mine, open) + teamBtn(g, 'home', mine, open) + '</div>'
       + (late ? '<div class="locknote">This pick was saved after kickoff, so it doesn’t count.</div>' : '')
       + (open && isLocked(g) && !mine ? '<div class="locknote">No pick made — locked.</div>' : '')
       + '</div>';
+    // The tiebreaker comes right after the MNF game, so it's the last thing you fill in.
+    if (g === tbg && fbOn && S.user) {
+      h += '<div class="card tbcard"><label for="tbInput"><b>Tiebreaker: total points in ' + esc(matchup(g)) + '</b>'
+        + '<span class="muted">' + (tbLocked ? 'Locked — MNF has started.' : 'Both teams’ points added together. Closest guess wins a tie on picks.') + '</span></label>'
+        + '<input id="tbInput" type="number" inputmode="numeric" min="0" max="200" placeholder="pts" value="' + esc(tbVal) + '"' + (tbLocked || !open ? ' disabled' : '') + '></div>';
+    }
   });
   h += '</div>';
+  if (fbOn && S.user && !removed) h += '<div class="card savecard">' + saveBarHtml() + '</div>';
   $('tab-picks').innerHTML = h;
-  [['loginName', ln], ['loginPhone', lp], ['nameBox', nb], ['tbInput', tb]].forEach(([id, k]) => { if (k.focus && $(id) && !$(id).disabled) $(id).focus(); });
+  [['loginName', ln], ['loginPhone', lp]].forEach(([id, k]) => { if (k.focus && $(id)) $(id).focus(); });
+  if ((focus === 'nameBox' || focus === 'tbInput') && $(focus) && !$(focus).disabled) {
+    const el = $(focus); el.focus();
+    try { const v = el.value.length; el.setSelectionRange(v, v); } catch (e) { /* number inputs don't support it */ }
+  }
 }
 
 const logoImg = (t, cls) => (t.logo ? '<img class="' + (cls || 'lg') + '" src="' + esc(t.logo) + '" alt="" loading="lazy">' : '');
@@ -643,7 +702,7 @@ setInterval(() => { if (S.ready) loadPickedWeeks(); }, 20 * 1000);
   catch (e) {
     console.warn(e);
     S.season = S.season || new Date().getFullYear();
-    S.curWeek = S.curWeek || 1;
+    S.curWeek = S.curWeek || weekByDate() || 1;
   }
   S.week = S.curWeek;
   if (!S.sb[S.week]) await loadWeek(S.week, true);

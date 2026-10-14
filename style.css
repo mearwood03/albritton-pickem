@@ -255,3 +255,14 @@ h1 {
   h1 { font-size: 22px; letter-spacing: .03em; -webkit-text-stroke-width: 1px;
     text-shadow: 1px 1px 0 #000, 2px 2px 0 #000, 3px 3px 0 #000, 4px 4px 0 #000, 5px 6px 4px rgba(0, 0, 0, .5); }
 }
+
+/* tiebreaker after MNF + the one Save button */
+.games .tbcard { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-color: var(--orange); }
+.tbcard label { display: flex; flex-direction: column; font-size: 14px; flex: 1 1 220px; }
+.tbcard label .muted { font-size: 12px; }
+.tbcard input { width: 100px; background: var(--navy); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 20px; text-align: center; }
+.savecard { max-width: 620px; margin: 12px auto 0; text-align: center; }
+.btn.save { width: 100%; padding: 14px 16px; font-size: 18px; text-transform: uppercase; letter-spacing: .04em; }
+.savestate { margin-top: 8px; font-size: 13px; color: var(--muted); }
+.savestate.dirty { color: var(--orange); font-weight: 700; }
+.topdirty { margin-top: 10px; font-size: 13px; color: var(--orange); }
