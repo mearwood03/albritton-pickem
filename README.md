@@ -8,11 +8,11 @@ for **@Blakealbritton6** ($21 entry).
   `config.js` and each week turns over on Tuesday). Type your name and phone number
   (no Google sign-in), check "I've paid my $21", tap a team in every game, then enter
   the tiebreaker right under the Monday Night Football game, and tap **Save my picks**
-  — one button saves everything. Each game locks at its own kickoff. Come back from any
+  — one button saves everything. Everything locks at Thursday kickoff. Come back from any
   phone with the same number to change picks. Phone numbers are never shown on the site.
 - **Leaderboard** — a spreadsheet of every player, auto-sorted by rank, with a column
   per game: green cell = right, red = wrong, light green/red = winning/losing live.
-  Other people's picks stay hidden until that game kicks off. Shows W/L, paid status
+  Other people's picks stay hidden until Thursday kickoff, then everyone's show. Shows W/L, paid status
   and the tiebreaker; a Season view shows each player's record week by week.
 
 Scores, logos, records and team names come from ESPN's public NFL feed and refresh
@@ -23,8 +23,10 @@ automatically: every 30 seconds while games are on, every 5 minutes otherwise.
 - Tie on picks → closest to the actual total points of the week's last game
   (Monday Night Football; the later one if there are two) wins.
 - A tied NFL game, or a postponed one, counts for nobody.
-- Every pick is stamped with Google's server clock. A pick saved after kickoff
-  shows as "late" and doesn't count.
+- **All picks lock at the week's first kickoff (Thursday night).** After that nobody
+  can change picks or the tiebreaker, and everyone's full picks show on the Leaderboard
+  (before then, other people's picks are hidden). Every pick is stamped with Google's
+  server clock, and anything saved after Thursday kickoff shows as "late" and doesn't count.
 - Players must check "I've paid" before they can pick.
 
 ## Commissioner (Blake)

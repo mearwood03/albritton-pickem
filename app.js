@@ -151,7 +151,7 @@ function changeCount(w) {
 function tapPick(g, team) {
   if (!S.user) return toast('Enter your name and phone number first.');
   if (isRemoved(S.week, S.user.uid)) return toast('Blake removed you from this week. Text him if that’s a mistake.');
-  if (isLocked(g)) return toast('That game has started — picks are locked.');
+  if (weekLocked(S.sb[S.week])) return toast('Week ' + S.week + ' is locked — picks closed at Thursday kickoff.');
   const sh = mySheet(S.week);
   const saved = sh && sh.picks[g.id] && sh.picks[g.id].team;
   const d = draft(S.week);
@@ -165,6 +165,7 @@ async function saveAll() {
   const tbg = tbGame(games);
   const name = (S.draftName != null ? S.draftName : savedName()).trim().replace(/\s+/g, ' ').slice(0, 30);
   if (!name) return toast('Type your name first.');
+  if (weekLocked(games)) return toast('Week ' + w + ' is locked — picks closed at Thursday kickoff.');
   if (isRemoved(w, S.user.uid)) return toast('Blake removed you from this week. Text him if that’s a mistake.');
   const paid = d.paid != null ? d.paid : !!sh.paid;
   if (!paid) return toast('Check the “I’ve paid” box before saving.');
@@ -181,14 +182,13 @@ async function saveAll() {
   if (d.paid != null && d.paid !== !!sh.paid) writes.push(one({ last: 'paid', paid: d.paid, at_paid: FV.serverTimestamp() }));
   Object.keys(d.picks).forEach((gid) => {
     const g = games.find((x) => x.id === gid);
-    if (!g || isLocked(g)) { skipped++; return; }
+    if (!g) { skipped++; return; }
     writes.push(one({ last: gid, ['g_' + gid]: d.picks[gid], ['at_' + gid]: FV.serverTimestamp() }));
     picks++;
   });
   let tbSaved = false;
   if (tb != null && tb !== sh.tb) {
-    if (tbg && isLocked(tbg)) skipped++;
-    else { writes.push(one({ last: 'tb', tb, at_tb: FV.serverTimestamp() })); tbSaved = true; }
+    writes.push(one({ last: 'tb', tb, at_tb: FV.serverTimestamp() })); tbSaved = true;
   }
   // One change per write (the rules check each one's server time). They're sent together, in order.
   S.saving = true; render();
@@ -322,7 +322,9 @@ async function loadWeek(w, force) {
   } catch (e) { console.warn(e); if (!S.sb[w]) S.sb[w] = null; }
   return S.sb[w];
 }
-const isLocked = (g) => Date.now() >= g.kick || g.state !== 'pre';
+// The whole week locks at its first kickoff (Thursday night). Picks saved after that don't count.
+const weekLock = (games) => (games && games.length ? Math.min(...games.map((g) => g.kick)) : Infinity);
+const weekLocked = (games) => !!(games && games.length) && (Date.now() >= weekLock(games) || games.some((g) => g.state !== 'pre'));
 const isLive = (g) => g.state === 'in';
 function winnerOf(g) {
   if (!g.final || g.void) return null;
@@ -346,18 +348,19 @@ function scoreWeek(w) {
   const tbg = tbGame(games);
   const tbTotal = tbg && (tbg.final || isLive(tbg)) ? total(tbg) : null;
   const done = games.length > 0 && games.every((g) => g.final || g.void);
+  const cutoff = weekLock(games);
   const rows = S.docs.filter((d) => d.week === w && !isRemoved(w, d.uid) && (Object.keys(d.picks).length || d.tb != null)).map((d) => {
     const r = { uid: d.uid, w: 0, l: 0, live: 0, pend: 0, made: 0, tb: null, diff: null, paid: d.paid };
     Object.keys(d.picks).forEach((gid) => {
       const g = byId[gid]; const p = d.picks[gid];
-      if (!g || p.at >= g.kick) return; // a pick saved after kickoff doesn't count
+      if (!g || p.at >= cutoff) return; // a pick saved after Thursday kickoff doesn't count
       r.made++;
       const win = winnerOf(g);
       if (win == null) { if (!g.void) { if (isLive(g)) r.live++; else r.pend++; } }
       else if (win === p.team) r.w++;
       else if (win !== 'TIE') r.l++;
     });
-    if (d.tb != null && tbg && d.tbAt < tbg.kick) {
+    if (d.tb != null && tbg && d.tbAt < cutoff) {
       r.tb = d.tb;
       if (tbTotal != null) r.diff = Math.abs(tbTotal - d.tb);
     }
@@ -468,7 +471,7 @@ function teamBtn(g, side, mine, open) {
   if (picked) { cls.push('picked'); if (win && win !== 'TIE') cls.push(win === t.abbr ? 'right' : 'wrong'); }
   if (win && win !== 'TIE' && win !== t.abbr) cls.push('lost');
   const showScore = g.state !== 'pre' && t.score != null;
-  const dis = !open || isLocked(g) ? ' disabled' : '';
+  const dis = !open ? ' disabled' : '';
   return '<button class="' + cls.join(' ') + '" data-act="pick" data-g="' + esc(g.id) + '" data-t="' + esc(t.abbr) + '"' + dis + ' aria-pressed="' + picked + '">'
     + (t.logo ? '<img src="' + esc(t.logo) + '" alt="" loading="lazy">' : '')
     + '<span class="tx"><span class="abbr">' + esc(t.full || t.name || t.abbr) + '</span>'
@@ -506,10 +509,11 @@ function renderPicks(games) {
   Object.keys(d.picks).forEach((gid) => { myPicks[gid] = { team: d.picks[gid], at: 0, draft: true }; });
   const paid = d.paid != null ? d.paid : !!(sheet && sheet.paid);
   const removed = S.user && isRemoved(S.week, S.user.uid);
-  const open = fbOn && !!S.user && !removed;
+  const open = fbOn && !!S.user && !removed && !weekLocked(games);
   const made = games.filter((g) => myPicks[g.id]).length;
-  const nextLock = games.filter((g) => !isLocked(g)).map((g) => g.kick)[0];
-  const tbLocked = tbg && isLocked(tbg);
+  const locked = weekLocked(games);
+  const lockAt = weekLock(games);
+  const tbLocked = locked;
   const ln = keep('loginName', ''), lp = keep('loginPhone', '');
   const focus = document.activeElement && document.activeElement.id;
   const nameVal = S.draftName != null ? S.draftName : savedName();
@@ -528,29 +532,29 @@ function renderPicks(games) {
     h += '<label class="card paidcard' + (paid ? ' on' : '') + '"><input type="checkbox" id="paidBox"' + (paid ? ' checked' : '') + (removed ? ' disabled' : '') + '>'
       + '<span><b>I’ve paid my ' + esc(feeAmt || 'entry') + ' for Week ' + S.week + '</b><span class="muted">Venmo <a href="https://venmo.com/u/' + esc(encodeURIComponent(venmo)) + '" target="_blank" rel="noopener">@' + esc(venmo) + '</a>. Required to save your picks.</span></span></label>';
     h += '<div class="card summary"><div class="progress"><b>' + made + ' of ' + games.length + ' picked</b>'
-      + '<div class="muted" style="font-size:12px">' + (nextLock ? 'Pick every game, then the MNF tiebreaker, then tap Save at the bottom · each game locks at kickoff · next lock ' + esc(fmtKick(nextLock)) : 'All games are locked for this week') + '</div>'
+      + '<div class="muted" style="font-size:12px">' + (locked ? 'Week ' + S.week + ' is locked — picks closed at Thursday kickoff. Everyone’s picks are on the Leaderboard.' : 'Pick every game, then the MNF tiebreaker, then tap Save at the bottom · <b>all picks lock at Thursday kickoff (' + esc(fmtKick(lockAt)) + ')</b>') + '</div>'
       + '<div class="bar"><i style="width:' + Math.round((made / games.length) * 100) + '%"></i></div>'
       + '<div class="topdirty" id="topDirty"' + (changeCount(S.week) ? '' : ' hidden') + '>You have unsaved changes — tap <b>Save my picks</b> at the bottom.</div></div></div>';
   }
   h += '<div class="games">';
   games.forEach((g) => {
     const mine = myPicks[g.id];
-    const late = mine && !mine.draft && mine.at >= g.kick;
+    const late = mine && !mine.draft && mine.at >= lockAt;
     h += '<div class="game' + (g === tbg ? ' tnf' : '') + '"><div class="game-head">' + statusText(g)
-      + '<span>' + (g === tbg ? '<span class="tag">MNF · Tiebreaker</span>' : '') + (isLocked(g) && g.state === 'pre' ? ' 🔒' : '') + '</span></div>'
+      + '<span>' + (g === tbg ? '<span class="tag">MNF · Tiebreaker</span>' : '') + (locked && g.state === 'pre' ? ' 🔒' : '') + '</span></div>'
       + '<div class="teams">' + teamBtn(g, 'away', mine, open) + teamBtn(g, 'home', mine, open) + '</div>'
-      + (late ? '<div class="locknote">This pick was saved after kickoff, so it doesn’t count.</div>' : '')
-      + (open && isLocked(g) && !mine ? '<div class="locknote">No pick made — locked.</div>' : '')
+      + (late ? '<div class="locknote">This pick was saved after Thursday kickoff, so it doesn’t count.</div>' : '')
+      + (S.user && locked && !mine ? '<div class="locknote">No pick made — locked.</div>' : '')
       + '</div>';
     // The tiebreaker comes right after the MNF game, so it's the last thing you fill in.
     if (g === tbg && fbOn && S.user) {
       h += '<div class="card tbcard"><label for="tbInput"><b>Tiebreaker: total points in ' + esc(matchup(g)) + '</b>'
-        + '<span class="muted">' + (tbLocked ? 'Locked — MNF has started.' : 'Both teams’ points added together. Closest guess wins a tie on picks.') + '</span></label>'
+        + '<span class="muted">' + (tbLocked ? 'Locked at Thursday kickoff.' : 'Both teams’ points added together. Closest guess wins a tie on picks.') + '</span></label>'
         + '<input id="tbInput" type="number" inputmode="numeric" min="0" max="200" placeholder="pts" value="' + esc(tbVal) + '"' + (tbLocked || !open ? ' disabled' : '') + '></div>';
     }
   });
   h += '</div>';
-  if (fbOn && S.user && !removed) h += '<div class="card savecard">' + saveBarHtml() + '</div>';
+  if (fbOn && S.user && !removed && !locked) h += '<div class="card savecard">' + saveBarHtml() + '</div>';
   $('tab-picks').innerHTML = h;
   [['loginName', ln], ['loginPhone', lp]].forEach(([id, k]) => { if (k.focus && $(id)) $(id).focus(); });
   if ((focus === 'nameBox' || focus === 'tbInput') && $(focus) && !$(focus).disabled) {
@@ -576,7 +580,8 @@ function adminCell(r) {
 // Green = right, red = wrong, light tint = live game currently winning/losing.
 function weekSheetHtml(games, sc) {
   const tbg = sc.tbg;
-  const tbLocked = tbg && isLocked(tbg);
+  const locked = weekLocked(games);
+  const cutoff = weekLock(games);
   let h = '<div class="tablewrap"><table class="sheet"><thead><tr><th class="rank">#</th><th class="name">Player</th><th class="tot">W</th><th class="tot">L</th><th class="tot">Paid</th>';
   // Column headers double as the scoreboard: each team's score, winner in bold, filled in as games finish.
   games.forEach((g) => {
@@ -598,8 +603,8 @@ function weekSheetHtml(games, sc) {
     games.forEach((g) => {
       const p = d && d.picks[g.id];
       if (!p) { h += '<td class="c none">–</td>'; return; }
-      if (!me && !isLocked(g)) { h += '<td class="c hide" title="Hidden until kickoff">🔒</td>'; return; }
-      if (p.at >= g.kick) { h += '<td class="c late" title="Saved after kickoff — doesn’t count">late</td>'; return; }
+      if (!me && !locked) { h += '<td class="c hide" title="Hidden until Thursday kickoff">🔒</td>'; return; }
+      if (p.at >= cutoff) { h += '<td class="c late" title="Saved after Thursday kickoff — doesn’t count">late</td>'; return; }
       const pt = teamBy(g, p.team);
       const win = winnerOf(g);
       let cls = 'open';
@@ -611,7 +616,7 @@ function weekSheetHtml(games, sc) {
       }
       h += '<td class="c ' + cls + '" title="' + esc(pt ? pt.full : p.team) + '">' + (pt ? logoImg(pt) : '') + '<span>' + esc(p.team) + '</span></td>';
     });
-    const tbShow = r.tb != null && (me || tbLocked || S.admin);
+    const tbShow = r.tb != null && (me || locked || S.admin);
     h += '<td class="tot">' + (r.tb == null ? '–' : tbShow ? r.tb : '🔒') + '</td><td class="tot">' + (r.diff == null ? '–' : r.diff) + '</td>' + (S.admin ? adminCell(r) : '') + '</tr>';
   });
   h += '</tbody></table></div>';
@@ -662,7 +667,7 @@ function renderBoard(games) {
     if (sc.winners.length) h += '<div class="notice" style="margin-bottom:10px">🏆 Week ' + S.week + ' winner' + (sc.winners.length > 1 ? 's' : '') + ': <b>' + sc.winners.map((u) => esc(nameOf(u))).join(', ') + '</b></div>';
     if (!sc.rows.length) h += '<div class="empty">No picks in yet for this week.</div>';
     else h += weekSheetHtml(games, sc)
-      + '<div class="legend"><span><i class="right"></i>Right</span><span><i class="wrong"></i>Wrong</span><span><i class="up"></i>Winning now</span><span><i class="down"></i>Losing now</span><span>🔒 hidden until kickoff</span><span>Paid: ✓ confirmed by Blake · “said” = checked the box</span></div>';
+      + '<div class="legend"><span><i class="right"></i>Right</span><span><i class="wrong"></i>Wrong</span><span><i class="up"></i>Winning now</span><span><i class="down"></i>Losing now</span><span>🔒 hidden until Thursday kickoff</span><span>Paid: ✓ confirmed by Blake · “said” = checked the box</span></div>';
     h += removedHtml() + '</div>';
   } else {
     h += '<div class="card"><h3>' + S.season + ' Season</h3>' + seasonSheetHtml() + '</div>';
