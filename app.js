@@ -399,13 +399,13 @@ function scoreWeek(w) {
   const done = games.length > 0 && games.every((g) => g.final || g.void);
   const cutoff = weekLock(games);
   const rows = S.docs.filter((d) => d.week === w && !isRemoved(w, d.uid) && (Object.keys(d.picks).length || d.tb != null)).map((d) => {
-    const r = { uid: d.uid, w: 0, l: 0, live: 0, pend: 0, made: 0, tb: null, diff: null, paid: d.paid };
+    const r = { uid: d.uid, w: 0, l: 0, live: 0, pend: 0, made: 0, tb: null, diff: null, paid: d.paid, rem: {} };
     Object.keys(d.picks).forEach((gid) => {
       const g = byId[gid]; const p = d.picks[gid];
       if (!g || !counts(w, games, g, p)) return; // a pick saved after the lock doesn't count
       r.made++;
       const win = winnerOf(g);
-      if (win == null) { if (!g.void) { if (isLive(g)) r.live++; else r.pend++; } }
+      if (win == null) { if (!g.void) { r.rem[gid] = p.team; if (isLive(g)) r.live++; else r.pend++; } }
       else if (win === p.team) r.w++;
       else if (win !== 'TIE') r.l++;
     });
@@ -423,6 +423,19 @@ function scoreWeek(w) {
     winners = rows.filter((r) => r.w === top.w && r.diff === top.diff).map((r) => r.uid);
   }
   rows.forEach((r, i) => { r.rank = i && rows[i - 1].w === r.w && rows[i - 1].diff === r.diff ? rows[i - 1].rank : i + 1; });
+  // Mathematically eliminated: even if every remaining game goes this player's way, someone else
+  // still finishes ahead (more right picks, or the same and a closer tiebreaker once MNF is final).
+  const tbKnown = !!(tbg && tbg.final);
+  rows.forEach((x) => {
+    const best = x.w + Object.keys(x.rem).length;
+    x.out = rows.some((y) => {
+      if (y === x) return false;
+      let yb = y.w;
+      Object.keys(x.rem).forEach((gid) => { if (y.rem[gid] === x.rem[gid]) yb++; });
+      if (yb !== best) return yb > best;
+      return tbKnown && (y.diff == null ? Infinity : y.diff) < (x.diff == null ? Infinity : x.diff);
+    });
+  });
   return { rows, winners, done, tbg, tbTotal, games };
 }
 function scoreSeason() {
@@ -662,7 +675,7 @@ function weekSheetHtml(games, sc) {
     const d = S.docs.find((x) => x.uid === r.uid && x.week === S.week);
     const me = isMe(r.uid);
     const won = sc.winners.includes(r.uid);
-    h += '<tr class="' + (me ? 'mine' : '') + (won ? ' won' : '') + '"><td class="rank">' + (won ? '🏆' : r.rank) + '</td><td class="name">' + esc(nameOf(r.uid)) + '</td>'
+    h += '<tr class="' + (me ? 'mine' : '') + (won ? ' won' : '') + (r.out ? ' out' : '') + '"' + (r.out ? ' title="Can’t win this week"' : '') + '><td class="rank">' + (won ? '🏆' : r.rank) + '</td><td class="name">' + esc(nameOf(r.uid)) + '</td>'
       + '<td class="tot w">' + r.w + '</td><td class="tot l">' + r.l + '</td>' + paidCell(S.week, r);
     games.forEach((g) => {
       const p = d && d.picks[g.id];
@@ -757,7 +770,7 @@ function renderBoard(games) {
     if (sc.winners.length) h += '<div class="notice" style="margin-bottom:10px">🏆 Week ' + S.week + ' winner' + (sc.winners.length > 1 ? 's' : '') + ': <b>' + sc.winners.map((u) => esc(nameOf(u))).join(', ') + '</b></div>';
     if (!sc.rows.length) h += '<div class="empty">No picks in yet for this week.</div>';
     else h += weekSheetHtml(games, sc)
-      + '<div class="legend"><span><i class="right"></i>Right</span><span><i class="wrong"></i>Wrong</span><span><i class="up"></i>Winning now</span><span><i class="down"></i>Losing now</span><span>🔒 hidden until Thursday kickoff</span><span>Paid: ✓ confirmed by Blake · “said” = checked the box</span></div>';
+      + '<div class="legend"><span><i class="right"></i>Right</span><span><i class="wrong"></i>Wrong</span><span><i class="up"></i>Winning now</span><span><i class="down"></i>Losing now</span><span><i class="out"></i>Can’t win this week</span><span>🔒 hidden until Thursday kickoff</span><span>Paid: ✓ confirmed by Blake · “said” = checked the box</span></div>';
     h += removedHtml() + '</div>';
   } else {
     h += '<div class="card"><h3>' + S.season + ' Season</h3>' + seasonSheetHtml() + '</div>';

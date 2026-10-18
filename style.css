@@ -285,3 +285,9 @@ h1 {
 .edfoot input { width: 80px; background: var(--navy); border: 1px solid var(--line); border-radius: 10px; padding: 8px; font-size: 16px; text-align: center; }
 .sheet td.c.fixed { position: relative; }
 .sheet td.c .fx { font-style: normal; font-size: 10px; margin-left: 3px; opacity: .85; }
+
+/* mathematically eliminated from winning the week */
+.sheet tr.out td { background: rgba(255, 90, 95, .13); }
+.sheet tr.out td.name { background: #2b3459; color: #ffb3b5; }
+.sheet tr.out.mine td { background: rgba(255, 90, 95, .2); }
+.legend i.out { background: rgba(255, 90, 95, .4); }

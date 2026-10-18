@@ -14,6 +14,8 @@ for **@Blakealbritton6** ($21 entry).
   per game: green cell = right, red = wrong, light green/red = winning/losing live.
   Other people's picks stay hidden until Thursday kickoff, then everyone's show. Shows W/L, paid status
   and the tiebreaker; a Season view shows each player's record week by week.
+  Rows shaded light red are mathematically eliminated: even if every remaining game
+  goes their way, someone else still finishes ahead.
 
 Scores, logos, records and team names come from ESPN's public NFL feed and refresh
 automatically: every 30 seconds while games are on, every 5 minutes otherwise.
