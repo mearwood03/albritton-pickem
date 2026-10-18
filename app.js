@@ -369,6 +369,10 @@ async function loadWeek(w, force) {
 }
 // The whole week locks at its first kickoff (Thursday night). Picks saved after that don't count.
 const weekLock = (games) => (games && games.length ? Math.min(...games.map((g) => g.kick)) : Infinity);
+// Weeks up to config.perGameLockThrough were played under the old rule (each game locked at its own
+// kickoff), so picks in those weeks count if saved before that game started.
+const pickCutoff = (w, games, g) => (w <= (CFG.perGameLockThrough || 0) ? g.kick : weekLock(games));
+const counts = (w, games, g, p) => !!p && (p.fixed || p.at < pickCutoff(w, games, g));
 const weekLocked = (games) => !!(games && games.length) && (Date.now() >= weekLock(games) || games.some((g) => g.state !== 'pre'));
 const isLive = (g) => g.state === 'in';
 function winnerOf(g) {
@@ -398,14 +402,14 @@ function scoreWeek(w) {
     const r = { uid: d.uid, w: 0, l: 0, live: 0, pend: 0, made: 0, tb: null, diff: null, paid: d.paid };
     Object.keys(d.picks).forEach((gid) => {
       const g = byId[gid]; const p = d.picks[gid];
-      if (!g || p.at >= cutoff) return; // a pick saved after Thursday kickoff doesn't count
+      if (!g || !counts(w, games, g, p)) return; // a pick saved after the lock doesn't count
       r.made++;
       const win = winnerOf(g);
       if (win == null) { if (!g.void) { if (isLive(g)) r.live++; else r.pend++; } }
       else if (win === p.team) r.w++;
       else if (win !== 'TIE') r.l++;
     });
-    if (d.tb != null && tbg && d.tbAt < cutoff) {
+    if (d.tb != null && tbg && d.tbAt < (w <= (CFG.perGameLockThrough || 0) ? tbg.kick : cutoff)) {
       r.tb = d.tb;
       if (tbTotal != null) r.diff = Math.abs(tbTotal - d.tb);
     }
@@ -486,7 +490,10 @@ document.addEventListener('click', (e) => {
   else if (act === 'edpick' && S.adminEdit) {
     const gid = a.dataset.g, team = a.dataset.t;
     const d = S.docs.find((x) => x.uid === S.adminEdit.uid && x.week === S.week);
-    const cur = d && d.picks[gid] && d.picks[gid].team;
+    const games = S.sb[S.week] || [];
+    const g = games.find((x) => x.id === gid);
+    const p = d && d.picks[gid];
+    const cur = p && g && counts(S.week, games, g, p) ? p.team : null;
     if (team === cur) delete S.adminEdit.picks[gid]; else S.adminEdit.picks[gid] = team;
     render();
   }
@@ -596,7 +603,7 @@ function renderPicks(games) {
   h += '<div class="games">';
   games.forEach((g) => {
     const mine = myPicks[g.id];
-    const late = mine && !mine.draft && mine.at >= lockAt;
+    const late = mine && !mine.draft && !counts(S.week, games, g, mine);
     h += '<div class="game' + (g === tbg ? ' tnf' : '') + '"><div class="game-head">' + statusText(g)
       + '<span>' + (g === tbg ? '<span class="tag">MNF · Tiebreaker</span>' : '') + (locked && g.state === 'pre' ? ' 🔒' : '') + '</span></div>'
       + '<div class="teams">' + teamBtn(g, 'away', mine, open) + teamBtn(g, 'home', mine, open) + '</div>'
@@ -639,7 +646,6 @@ function adminCell(r) {
 function weekSheetHtml(games, sc) {
   const tbg = sc.tbg;
   const locked = weekLocked(games);
-  const cutoff = weekLock(games);
   let h = '<div class="tablewrap"><table class="sheet"><thead><tr><th class="rank">#</th><th class="name">Player</th><th class="tot">W</th><th class="tot">L</th><th class="tot">Paid</th>';
   // Column headers double as the scoreboard: each team's score, winner in bold, filled in as games finish.
   games.forEach((g) => {
@@ -662,7 +668,7 @@ function weekSheetHtml(games, sc) {
       const p = d && d.picks[g.id];
       if (!p) { h += '<td class="c none">–</td>'; return; }
       if (!me && !locked) { h += '<td class="c hide" title="Hidden until Thursday kickoff">🔒</td>'; return; }
-      if (p.at >= cutoff) { h += '<td class="c late" title="Saved after Thursday kickoff — doesn’t count">late</td>'; return; }
+      if (!counts(S.week, games, g, p)) { h += '<td class="c late" title="Saved after Thursday kickoff — doesn’t count">late</td>'; return; }
       const pt = teamBy(g, p.team);
       const win = winnerOf(g);
       let cls = 'open';

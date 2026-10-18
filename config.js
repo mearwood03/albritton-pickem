@@ -15,6 +15,9 @@ window.PICKEM_CONFIG = {
   entryFee: "$21 entry",
   // Tuesday that Week 1 starts (Eastern). The site opens on the current week and turns over each Tuesday.
   week1Start: "2026-09-08",
+  // Through this week, each game locked at its own kickoff. From the next week on, everything locks
+  // at the week's first kickoff (Thursday night).
+  perGameLockThrough: 6,
   // Commissioner login (can mark who paid and remove people). Must match firestore.rules.
   commissioner: "blakealbritton6@gmail.com"
 };

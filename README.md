@@ -23,7 +23,9 @@ automatically: every 30 seconds while games are on, every 5 minutes otherwise.
 - Tie on picks → closest to the actual total points of the week's last game
   (Monday Night Football; the later one if there are two) wins.
 - A tied NFL game, or a postponed one, counts for nobody.
-- **All picks lock at the week's first kickoff (Thursday night).** After that nobody
+- **Starting Week 7, all picks lock at the week's first kickoff (Thursday night).**
+  (Weeks 1–6 used the old rule: each game locked at its own kickoff — `perGameLockThrough`
+  in `config.js`.) After that nobody
   can change picks or the tiebreaker, and everyone's full picks show on the Leaderboard
   (before then, other people's picks are hidden). Every pick is stamped with Google's
   server clock, and anything saved after Thursday kickoff shows as "late" and doesn't count.
