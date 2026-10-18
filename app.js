@@ -20,6 +20,7 @@ const S = {
   sb: {}, // week -> games[]
   tab: 'picks', boardView: 'week', updated: 0, ready: false, busy: false,
   drafts: {}, draftName: null, saving: false, // unsaved changes, kept until the one Save button
+  rawDocs: [], adminEdit: null, // commissioner's pick editor: { uid, picks: {}, tb }
 };
 try { S.tab = localStorage.getItem('ape:tab') === 'board' ? 'board' : 'picks'; } catch (e) {}
 
@@ -42,6 +43,7 @@ $('nextWk').addEventListener('click', () => goWeek(S.week + 1));
 async function goWeek(w) {
   if (w < 1 || w > WEEKS) return;
   S.week = w;
+  if (S.adminEdit) S.adminEdit = { uid: S.adminEdit.uid, picks: {}, tb: null };
   render();
   await loadWeek(w, true);
   render();
@@ -77,15 +79,33 @@ if (fbOn) {
 function subscribeSeason() {
   if (!fbOn || seasonUnsub || !S.season) return;
   seasonUnsub = db.collection('picks').where('season', '==', S.season).onSnapshot((snap) => {
-    S.docs = snap.docs.map((d) => parseSheet(d.data({ serverTimestamps: 'estimate' })));
-    render();
+    S.rawDocs = snap.docs.map((d) => parseSheet(d.data({ serverTimestamps: 'estimate' })));
+    mergeDocs(); render();
   }, (e) => { console.warn('picks', e); });
   // Commissioner's paid / removed marks, one doc per player per week: "<season>-<week>_<uid>".
   statusUnsub = db.collection('status').where('season', '==', S.season).onSnapshot((snap) => {
     S.status = {};
     snap.forEach((d) => { S.status[d.id] = d.data(); });
-    render();
+    mergeDocs(); render();
   }, (e) => { console.warn('status', e); });
+}
+// Blake's changes live in the status doc (fixPicks = { gameId: team }, fixTb) and always count,
+// whatever time he makes them. They sit on top of the player's own picks.
+function mergeDocs() {
+  const out = S.rawDocs.map((d) => Object.assign({}, d, { picks: Object.assign({}, d.picks) }));
+  const byKey = {};
+  out.forEach((d) => { byKey[d.week + '_' + d.uid] = d; });
+  Object.keys(S.status).forEach((id) => {
+    const st = S.status[id];
+    const fixes = st.fixPicks || {};
+    if (!Object.keys(fixes).length && typeof st.fixTb !== 'number') return;
+    const uid = id.slice(id.indexOf('_') + 1), w = st.week;
+    let d = byKey[w + '_' + uid];
+    if (!d) { d = { uid, week: w, season: st.season, picks: {}, tb: null, tbAt: 0, paid: false }; out.push(d); byKey[w + '_' + uid] = d; }
+    Object.keys(fixes).forEach((gid) => { if (fixes[gid]) d.picks[gid] = { team: fixes[gid], at: -Infinity, fixed: true }; });
+    if (typeof st.fixTb === 'number') { d.tb = st.fixTb; d.tbAt = -Infinity; d.tbFixed = true; }
+  });
+  S.docs = out;
 }
 // A pick sheet is one doc per player per week: g_<gameId> = team, at_<gameId> = server time of that pick.
 function parseSheet(d) {
@@ -242,7 +262,32 @@ $('adminReset').addEventListener('click', async () => {
 async function setStatus(uid, patch) {
   try {
     await db.collection('status').doc(wkKey(S.week) + '_' + uid).set(Object.assign({ season: S.season, week: S.week }, patch), { merge: true });
-  } catch (e) { console.warn(e); toast('Couldn’t save that. Are you still signed in as commissioner?' + why(e)); }
+    return true;
+  } catch (e) { console.warn(e); toast('Couldn’t save that. Are you still signed in as commissioner?' + why(e)); return false; }
+}
+// Commissioner pick editor: change anyone's picks or tiebreaker for the week shown, any time.
+function openEditor(uid) {
+  S.adminEdit = uid ? { uid, picks: {}, tb: null } : { uid: '', picks: {}, tb: null };
+  render();
+  setTimeout(() => { const el = $('pickEditor'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
+}
+async function saveEditor() {
+  const ed = S.adminEdit;
+  if (!ed || !ed.uid) return toast('Pick a player first.');
+  const patch = { fixedAt: FV.serverTimestamp() };
+  const n = Object.keys(ed.picks).length;
+  if (n) patch.fixPicks = Object.assign({}, ed.picks);
+  if (ed.tb != null && String(ed.tb).trim() !== '') {
+    const tb = parseInt(ed.tb, 10);
+    if (!(tb >= 0 && tb <= 200)) return toast('Tiebreaker: enter total points between 0 and 200.');
+    patch.fixTb = tb;
+  }
+  if (!n && patch.fixTb == null) return toast('No changes to save.');
+  if (await setStatus(ed.uid, patch)) {
+    toast('Saved ' + nameOf(ed.uid) + '’s changes' + (n ? ' (' + n + ' pick' + (n > 1 ? 's' : '') + (patch.fixTb != null ? ' + tiebreaker' : '') + ')' : ' (tiebreaker)') + '.');
+    S.adminEdit = { uid: ed.uid, picks: {}, tb: null };
+    render();
+  }
 }
 
 
@@ -409,7 +454,7 @@ function render() {
   $('nextWk').disabled = S.week >= WEEKS;
   const notes = [];
   if (!fbOn) notes.push('Picks aren’t switched on yet — paste the Firebase settings into <b>config.js</b> (see README). Scores below are live.');
-  if (S.admin) notes.push('You’re signed in as <b>commissioner</b>. Mark who paid or remove people on the Leaderboard tab. <button class="btn sm ghost" data-act="logout">Sign out</button>');
+  if (S.admin) notes.push('You’re signed in as <b>commissioner</b>. Mark who paid, edit anyone’s picks, or remove people on the Leaderboard tab. <button class="btn sm ghost" data-act="logout">Sign out</button>');
   $('notice').innerHTML = notes.join('<br>');
   $('notice').hidden = !notes.length;
   if (games === null) { $('tab-' + S.tab).innerHTML = '<div class="empty">Couldn’t reach ESPN for this week. It will try again shortly.</div>'; return; }
@@ -435,12 +480,23 @@ document.addEventListener('click', (e) => {
   } else if (act === 'save') saveAll();
   else if (act === 'bv') { S.boardView = a.dataset.v; render(); }
   else if (act === 'confirm') setStatus(a.dataset.u, { confirmed: a.dataset.on === '1' });
+  else if (act === 'edit') openEditor(a.dataset.u);
+  else if (act === 'edclose') { S.adminEdit = null; render(); }
+  else if (act === 'edsave') saveEditor();
+  else if (act === 'edpick' && S.adminEdit) {
+    const gid = a.dataset.g, team = a.dataset.t;
+    const d = S.docs.find((x) => x.uid === S.adminEdit.uid && x.week === S.week);
+    const cur = d && d.picks[gid] && d.picks[gid].team;
+    if (team === cur) delete S.adminEdit.picks[gid]; else S.adminEdit.picks[gid] = team;
+    render();
+  }
   else if (act === 'remove') {
     const on = a.dataset.on === '1';
     if (!on || confirm('Remove ' + nameOf(a.dataset.u) + ' from Week ' + S.week + '? Their picks stop counting and they can’t pick until you restore them.')) setStatus(a.dataset.u, { removed: on });
   }
 });
 document.addEventListener('change', (e) => {
+  if (e.target.id === 'edPlayer') { S.adminEdit = { uid: e.target.value, picks: {}, tb: null }; render(); return; }
   if (e.target.id !== 'paidBox' || !S.user) return;
   const sh = mySheet(S.week);
   draft(S.week).paid = e.target.checked === !!(sh && sh.paid) ? null : e.target.checked;
@@ -450,6 +506,7 @@ document.addEventListener('input', (e) => {
   const id = e.target.id;
   if (id === 'loginName' || id === 'loginPhone') e.target.dataset.dirty = '1';
   else if (id === 'nameBox') { S.draftName = e.target.value; updateSaveBar(); }
+  else if (id === 'edTb' && S.adminEdit) S.adminEdit.tb = e.target.value;
   else if (id === 'tbInput') {
     const sh = mySheet(S.week);
     draft(S.week).tb = e.target.value === String(sh && sh.tb != null ? sh.tb : '') ? null : e.target.value;
@@ -574,6 +631,7 @@ function paidCell(w, r) {
 function adminCell(r) {
   const st = statusOf(S.week, r.uid);
   return '<td class="adm"><button class="btn sm' + (st.confirmed ? '' : ' ghost') + '" data-act="confirm" data-u="' + esc(r.uid) + '" data-on="' + (st.confirmed ? '0' : '1') + '">' + (st.confirmed ? 'Paid ✓' : 'Mark paid') + '</button> '
+    + '<button class="btn sm ghost" data-act="edit" data-u="' + esc(r.uid) + '">Edit picks</button> '
     + '<button class="btn sm ghost" data-act="remove" data-u="' + esc(r.uid) + '" data-on="1">Remove</button></td>';
 }
 // Week spreadsheet: one row per player (sorted by rank), one column per game.
@@ -614,7 +672,7 @@ function weekSheetHtml(games, sc) {
         const lead = g.home.score > g.away.score ? g.home.abbr : g.away.abbr;
         cls = lead === p.team ? 'up' : 'down';
       }
-      h += '<td class="c ' + cls + '" title="' + esc(pt ? pt.full : p.team) + '">' + (pt ? logoImg(pt) : '') + '<span>' + esc(p.team) + '</span></td>';
+      h += '<td class="c ' + cls + (p.fixed ? ' fixed' : '') + '" title="' + esc(pt ? pt.full : p.team) + (p.fixed ? ' · changed by Blake' : '') + '">' + (pt ? logoImg(pt) : '') + '<span>' + esc(p.team) + '</span>' + (p.fixed ? '<i class="fx">✎</i>' : '') + '</td>';
     });
     const tbShow = r.tb != null && (me || locked || S.admin);
     h += '<td class="tot">' + (r.tb == null ? '–' : tbShow ? r.tb : '🔒') + '</td><td class="tot">' + (r.diff == null ? '–' : r.diff) + '</td>' + (S.admin ? adminCell(r) : '') + '</tr>';
@@ -655,6 +713,31 @@ function seasonSheetHtml() {
   return h;
 }
 
+function editorHtml(games) {
+  const ed = S.adminEdit;
+  const ids = Object.keys(S.players).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+  let h = '<div class="card editor" id="pickEditor"><h3>✎ Edit picks · Week ' + S.week + '</h3>'
+    + '<p class="muted">Commissioner only. Changes here count no matter when you make them, even after the week locks.</p>'
+    + '<select id="edPlayer"><option value="">Choose a player…</option>'
+    + ids.map((u) => '<option value="' + esc(u) + '"' + (u === ed.uid ? ' selected' : '') + '>' + esc(nameOf(u)) + '</option>').join('') + '</select>';
+  if (ed.uid) {
+    const d = S.docs.find((x) => x.uid === ed.uid && x.week === S.week) || { picks: {}, tb: null };
+    h += '<div class="edgames">';
+    games.forEach((g) => {
+      const cur = d.picks[g.id];
+      const team = ed.picks[g.id] || (cur && cur.team);
+      const b = (t) => '<button class="edt' + (team === t.abbr ? ' on' : '') + (ed.picks[g.id] === t.abbr ? ' changed' : '') + '" data-act="edpick" data-g="' + esc(g.id) + '" data-t="' + esc(t.abbr) + '">' + logoImg(t) + esc(t.abbr) + '</button>';
+      h += '<div class="edrow"><span class="edwhen">' + esc(etDay(g.kick)) + '</span>' + b(g.away) + '<span class="at">@</span>' + b(g.home) + '</div>';
+    });
+    const tbVal = ed.tb != null ? ed.tb : d.tb != null ? d.tb : '';
+    const n = Object.keys(ed.picks).length + (ed.tb != null && String(ed.tb) !== String(d.tb != null ? d.tb : '') ? 1 : 0);
+    h += '</div><div class="edfoot"><label>MNF tiebreaker <input id="edTb" type="number" inputmode="numeric" min="0" max="200" value="' + esc(tbVal) + '"></label>'
+      + '<button class="btn" data-act="edsave">Save ' + esc(nameOf(ed.uid)) + '’s changes</button>'
+      + '<button class="btn ghost" data-act="edclose">Close</button></div>'
+      + (n ? '<div class="savestate dirty">' + n + ' unsaved change' + (n > 1 ? 's' : '') + '</div>' : '');
+  } else h += ' <button class="btn ghost sm" data-act="edclose">Close</button>';
+  return h + '</div>';
+}
 function renderBoard(games) {
   let h = '<div class="subtabs"><button data-act="bv" data-v="week" class="' + (S.boardView === 'week' ? 'on' : '') + '">Week ' + S.week + '</button>'
     + '<button data-act="bv" data-v="season" class="' + (S.boardView === 'season' ? 'on' : '') + '">Season</button></div>';
@@ -662,6 +745,7 @@ function renderBoard(games) {
   else if (S.boardView === 'week') {
     const sc = scoreWeek(S.week);
     const live = games.some(isLive);
+    if (S.admin) h += S.adminEdit ? editorHtml(games) : '<div class="edopen"><button class="btn sm" data-act="edit" data-u="">✎ Edit someone’s picks</button></div>';
     h += '<div class="card"><h3>Week ' + S.week + (sc.done ? ' · Final' : live ? ' · Live' : '') + '</h3>';
     if (sc.tbg) h += '<div class="muted" style="font-size:13px;margin-bottom:8px">Tiebreaker (MNF): ' + esc(matchup(sc.tbg)) + ' total points' + (sc.tbTotal != null ? ' — <b style="color:#fff">' + sc.tbTotal + (sc.tbg.final ? ' final' : ' so far') + '</b>' : '') + '</div>';
     if (sc.winners.length) h += '<div class="notice" style="margin-bottom:10px">🏆 Week ' + S.week + ' winner' + (sc.winners.length > 1 ? 's' : '') + ': <b>' + sc.winners.map((u) => esc(nameOf(u))).join(', ') + '</b></div>';
@@ -672,7 +756,9 @@ function renderBoard(games) {
   } else {
     h += '<div class="card"><h3>' + S.season + ' Season</h3>' + seasonSheetHtml() + '</div>';
   }
+  const focusTb = document.activeElement && document.activeElement.id === 'edTb';
   $('tab-board').innerHTML = h;
+  if (focusTb && $('edTb')) $('edTb').focus();
 }
 
 /* ---------------- refresh loop ---------------- */

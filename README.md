@@ -37,6 +37,11 @@ blakealbritton6@gmail.com.
 - On the **Leaderboard** tab each player gets **Mark paid** (shows a green ✓ in the
   Paid column) and **Remove** (their picks stop counting that week and they can't
   pick). Removed players are listed under the table with a **Restore** button.
+- **Edit picks:** tap **✎ Edit someone's picks** (or **Edit picks** on a player's row),
+  choose the player, tap the teams to change, set the tiebreaker if needed, and tap
+  **Save**. Blake's changes count no matter when he makes them, even after the week
+  locks, and show a ✎ on the leaderboard. He can also enter picks for someone who
+  never submitted any (e.g. they texted them in).
 - "said" in the Paid column means the player checked the box but Blake hasn't
   confirmed it yet.
 - Logging in as commissioner logs that phone out of its player picks. Tap **Sign out**
