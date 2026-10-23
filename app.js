@@ -271,9 +271,21 @@ function openEditor(uid) {
   render();
   setTimeout(() => { const el = $('pickEditor'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
 }
+// Commissioner adds someone who has no login (e.g. they texted their picks in).
+async function addPerson(raw) {
+  const name = String(raw || '').trim().replace(/\s+/g, ' ').slice(0, 30);
+  if (!name) return toast('Type their name first.');
+  const id = 'c_' + Math.random().toString(36).slice(2, 12);
+  try {
+    await db.collection('players').doc(id).set({ name, updatedAt: FV.serverTimestamp() });
+    S.adminEdit = { uid: id, picks: {}, tb: null };
+    toast(name + ' added. Now enter their picks.');
+    render();
+  } catch (e) { console.warn(e); toast('Couldn’t add them. Are you still signed in as commissioner?' + why(e)); }
+}
 async function saveEditor() {
   const ed = S.adminEdit;
-  if (!ed || !ed.uid) return toast('Pick a player first.');
+  if (!ed || !ed.uid || ed.uid === '__new') return toast('Pick a player first.');
   const patch = { fixedAt: FV.serverTimestamp() };
   const n = Object.keys(ed.picks).length;
   if (n) patch.fixPicks = Object.assign({}, ed.picks);
@@ -499,6 +511,7 @@ document.addEventListener('click', (e) => {
   else if (act === 'confirm') setStatus(a.dataset.u, { confirmed: a.dataset.on === '1' });
   else if (act === 'edit') openEditor(a.dataset.u);
   else if (act === 'edclose') { S.adminEdit = null; render(); }
+  else if (act === 'edadd') addPerson($('edNewName') && $('edNewName').value);
   else if (act === 'edsave') saveEditor();
   else if (act === 'edpick' && S.adminEdit) {
     const gid = a.dataset.g, team = a.dataset.t;
@@ -738,8 +751,13 @@ function editorHtml(games) {
   let h = '<div class="card editor" id="pickEditor"><h3>✎ Edit picks · Week ' + S.week + '</h3>'
     + '<p class="muted">Commissioner only. Changes here count no matter when you make them, even after the week locks.</p>'
     + '<select id="edPlayer"><option value="">Choose a player…</option>'
-    + ids.map((u) => '<option value="' + esc(u) + '"' + (u === ed.uid ? ' selected' : '') + '>' + esc(nameOf(u)) + '</option>').join('') + '</select>';
-  if (ed.uid) {
+    + ids.map((u) => '<option value="' + esc(u) + '"' + (u === ed.uid ? ' selected' : '') + '>' + esc(nameOf(u)) + '</option>').join('')
+    + '<option value="__new"' + (ed.uid === '__new' ? ' selected' : '') + '>+ Add a new person…</option></select>';
+  if (ed.uid === '__new') {
+    h += '<div class="edfoot" style="margin-top:12px"><input id="edNewName" maxlength="30" placeholder="Their name" autocomplete="off">'
+      + '<button class="btn" data-act="edadd">Add to the pool</button><button class="btn ghost" data-act="edclose">Close</button></div>'
+      + '<p class="muted" style="margin-top:8px">Then enter their picks. Picks you enter are marked ✎ on the leaderboard like your other edits.</p>';
+  } else if (ed.uid) {
     const d = S.docs.find((x) => x.uid === ed.uid && x.week === S.week) || { picks: {}, tb: null };
     h += '<div class="edgames">';
     games.forEach((g) => {

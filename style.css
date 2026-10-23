@@ -291,3 +291,5 @@ h1 {
 .sheet tr.out td.name { background: #2b3459; color: #ffb3b5; }
 .sheet tr.out.mine td { background: rgba(255, 90, 95, .2); }
 .legend i.out { background: rgba(255, 90, 95, .4); }
+
+.edfoot #edNewName { flex: 1 1 200px; background: var(--navy); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 16px; }

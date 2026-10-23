@@ -46,6 +46,10 @@ blakealbritton6@gmail.com.
   **Save**. Blake's changes count no matter when he makes them, even after the week
   locks, and show a ✎ on the leaderboard. He can also enter picks for someone who
   never submitted any (e.g. they texted them in).
+- **Add a new person:** in the Edit picks player list choose **+ Add a new person…**,
+  type their name, tap **Add to the pool**, then enter their picks. They have no login;
+  if they later sign in with their phone they'll show up as a separate entry, so Blake
+  can remove one.
 - "said" in the Paid column means the player checked the box but Blake hasn't
   confirmed it yet.
 - Logging in as commissioner logs that phone out of its player picks. Tap **Sign out**
