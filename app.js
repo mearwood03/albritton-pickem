@@ -124,7 +124,7 @@ const sheetRef = (w) => db.collection('picks').doc(wkKey(w) + '_' + S.user.uid);
 const mySheet = (w) => S.user && S.docs.find((d) => d.uid === S.user.uid && d.week === w);
 const statusOf = (w, uid) => S.status[wkKey(w) + '_' + uid] || {};
 const isRemoved = (w, uid) => statusOf(w, uid).removed === true;
-const nameOf = (uid) => (S.players[uid] && S.players[uid].name) || 'Player';
+const nameOf = (uid) => (String(uid).startsWith('h:') ? uid.slice(2) : (S.players[uid] && S.players[uid].name) || 'Player');
 
 /* ---------------- player login: name + phone ---------------- */
 const digitsOf = (p) => { let d = String(p || '').replace(/\D/g, ''); if (d.length === 11 && d[0] === '1') d = d.slice(1); return d; };
@@ -450,12 +450,33 @@ function scoreWeek(w) {
   });
   return { rows, winners, done, tbg, tbTotal, games };
 }
+// Weeks played before the site (history.js), as week results keyed like site rows:
+// the player's uid when their spreadsheet name matches a site name, otherwise "h:<name>".
+const HIST = window.PICKEM_HISTORY || { weeks: {}, aliases: {} };
+function histKey(name) {
+  const base = String(name).replace(/\s*#\d+$/, '');
+  const second = base !== name;
+  const site = String((HIST.aliases || {})[base] || base).toLowerCase();
+  const uid = !second && Object.keys(S.players).find((u) => String(S.players[u].name || '').trim().toLowerCase() === site);
+  return uid || 'h:' + name;
+}
+function histWeek(w) {
+  const hw = (HIST.weeks || {})[w];
+  if (!hw) return null;
+  const rows = Object.keys(hw.wins).map((n) => ({ uid: histKey(n), w: hw.wins[n], l: Math.max(0, (hw.games || 0) - hw.wins[n]) }));
+  rows.sort((a, b) => b.w - a.w);
+  return { rows, winners: (hw.winners || []).map(histKey), done: true };
+}
+const histWeeks = () => Object.keys(HIST.weeks || {}).map(Number);
+function seasonWeeks() {
+  const site = [...new Set(S.docs.map((d) => d.week))].filter((w) => S.sb[w] && !(HIST.weeks || {})[w]);
+  return [...new Set(histWeeks().concat(site))].sort((a, b) => a - b);
+}
+const weekResult = (w) => histWeek(w) || scoreWeek(w);
 function scoreSeason() {
   const tot = {};
-  const weeks = [...new Set(S.docs.map((d) => d.week))].sort((a, b) => a - b);
-  weeks.forEach((w) => {
-    if (!S.sb[w]) return;
-    const s = scoreWeek(w);
+  seasonWeeks().forEach((w) => {
+    const s = weekResult(w);
     s.rows.forEach((r) => {
       const t = tot[r.uid] || (tot[r.uid] = { uid: r.uid, w: 0, l: 0, weeks: 0, won: 0 });
       t.w += r.w; t.l += r.l; t.weeks++;
@@ -721,9 +742,9 @@ function removedHtml() {
 function seasonSheetHtml() {
   const rows = scoreSeason();
   if (!rows.length) return '<div class="empty">No picks yet this season.</div>';
-  const weeks = [...new Set(S.docs.map((d) => d.week))].filter((w) => S.sb[w]).sort((a, b) => a - b);
+  const weeks = seasonWeeks();
   const per = {};
-  weeks.forEach((w) => { per[w] = scoreWeek(w); });
+  weeks.forEach((w) => { per[w] = weekResult(w); });
   let h = '<div class="tablewrap"><table class="sheet"><thead><tr><th class="rank">#</th><th class="name">Player</th><th class="tot">W</th><th class="tot">L</th><th class="tot">Pct</th><th class="tot">🏆</th>';
   weeks.forEach((w) => { h += '<th class="tot">Wk ' + w + '</th>'; });
   h += '</tr></thead><tbody>';

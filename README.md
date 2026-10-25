@@ -93,4 +93,6 @@ blakealbritton6@gmail.com.
 ## Files
 - `index.html`, `style.css`, `app.js` — the site
 - `config.js` — Firebase keys, Venmo tag, entry fee, commissioner email
+- `history.js` — Weeks 1–5 from the spreadsheet (wins per entry, weekly winners, and which
+  spreadsheet name is which site player); shown on the Season tab
 - `firestore.rules` — who can change what (each player only their own picks; only Blake marks paid / removes)
