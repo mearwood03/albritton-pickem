@@ -434,10 +434,17 @@ function scoreWeek(w) {
     const top = rows[0];
     winners = rows.filter((r) => r.w === top.w && r.diff === top.diff).map((r) => r.uid);
   }
+  // A winner set by hand in history.js (winnerOverrides, by site name) takes precedence.
+  const ov = ((window.PICKEM_HISTORY || {}).winnerOverrides || {})[w];
+  if (ov && ov.length) {
+    const want = ov.map((n) => String(n).trim().toLowerCase());
+    winners = rows.filter((r) => want.includes(nameOf(r.uid).trim().toLowerCase())).map((r) => r.uid);
+  }
   rows.forEach((r, i) => { r.rank = i && rows[i - 1].w === r.w && rows[i - 1].diff === r.diff ? rows[i - 1].rank : i + 1; });
   // Mathematically eliminated: even if every remaining game goes this player's way, someone else
   // still finishes ahead (more right picks, or the same and a closer tiebreaker once MNF is final).
   const tbKnown = !!(tbg && tbg.final);
+  if (ov && ov.length && winners.length) { rows.forEach((x) => { x.out = !winners.includes(x.uid); }); return { rows, winners, done, tbg, tbTotal, games }; }
   rows.forEach((x) => {
     const best = x.w + Object.keys(x.rem).length;
     x.out = rows.some((y) => {

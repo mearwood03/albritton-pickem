@@ -27,6 +27,11 @@ window.PICKEM_HISTORY = {
     'Brandon Lanier': 'Brandon',
     'Trey Hood': 'Papi',
   },
+  // Weekly winners set by hand for weeks played on the site (use the name shown on the site).
+  // Overrides what the site works out from the scores and tiebreaker.
+  winnerOverrides: {
+    6: ['Papi'], // Trey Hood
+  },
   weeks: {
     1: {
       games: 15, // MNF (DEN @ KC) wasn't graded on the sheet
