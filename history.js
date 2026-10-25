@@ -25,6 +25,7 @@ window.PICKEM_HISTORY = {
     'Rachel Collins': 'Rach',
     'Tim Martin': 'Timbo',
     'Brandon Lanier': 'Brandon',
+    'Trey Hood': 'Papi',
   },
   weeks: {
     1: {
