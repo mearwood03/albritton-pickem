@@ -30,7 +30,7 @@ window.PICKEM_HISTORY = {
   weeks: {
     1: {
       games: 15, // MNF (DEN @ KC) wasn't graded on the sheet
-      winners: [], // 4-way tie at 11 (Mike Puffer, JR Harrington, JR Harrington #2, Trey Hood) — needs the tiebreaker
+      winners: ['Trey Hood'], // won the tiebreaker over Mike Puffer, JR Harrington and JR Harrington #2 (all 11)
       wins: {
         'Evan Collins': 8, 'Dave Rano': 9, 'Blake Albritton': 9, 'Brandon Lanier': 8, 'Scott Cole': 10,
         'Ethan C': 10, 'Chris Weaver': 10, 'Denia Rano': 9, 'Mike Puffer': 11, 'Blake Ozack': 10,
