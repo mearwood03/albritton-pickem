@@ -52,7 +52,7 @@ window.PICKEM_HISTORY = {
     },
     3: {
       games: 16,
-      winners: [], // tie at 11 (Alex Bull, Triston Allen) — needs the tiebreaker
+      winners: ['Alex Bull'], // won the tiebreaker over Triston Allen (both 11)
       wins: {
         'Denia Rano': 6, 'Alex Bull': 11, 'Trey Hood': 9, 'Trey Hood #2': 7, 'Kyler Nowling': 7,
         'Jason Hill': 9, 'Scott Cole': 5, 'Dwight Samuel': 10, 'Evan Collins': 8, 'Rachel Collins': 9,
