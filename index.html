@@ -31,24 +31,7 @@
     </a>
     <span class="fee" id="fee"></span>
     <div class="pot" id="pot" hidden>
-      <svg class="potsvg" viewBox="0 0 120 100" aria-hidden="true">
-        <defs>
-          <radialGradient id="potBody" cx="38%" cy="35%" r="70%"><stop offset="0" stop-color="#5a5a5a"/><stop offset=".45" stop-color="#1e1e1e"/><stop offset="1" stop-color="#050505"/></radialGradient>
-          <linearGradient id="coin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3a6"/><stop offset=".5" stop-color="#f2c230"/><stop offset="1" stop-color="#b8860b"/></linearGradient>
-        </defs>
-        <path d="M24 38 C24 6 96 6 96 38" fill="none" stroke="#555" stroke-width="3.5"/>
-        <ellipse cx="60" cy="38" rx="38" ry="9" fill="#b8860b"/>
-        <g fill="url(#coin)" stroke="#a57400" stroke-width=".8">
-          <ellipse cx="44" cy="34" rx="9" ry="4"/><ellipse cx="60" cy="31" rx="9" ry="4"/><ellipse cx="76" cy="34" rx="9" ry="4"/>
-          <ellipse cx="52" cy="27" rx="9" ry="4"/><ellipse cx="68" cy="26" rx="9" ry="4"/><ellipse cx="60" cy="21" rx="9" ry="4"/>
-          <ellipse cx="36" cy="38" rx="7" ry="3"/><ellipse cx="84" cy="38" rx="7" ry="3"/>
-        </g>
-        <ellipse cx="60" cy="41" rx="42" ry="7" fill="#111"/>
-        <path d="M20 42 C14 70 30 94 60 94 C90 94 106 70 100 42 Z" fill="url(#potBody)"/>
-        <ellipse cx="14" cy="60" rx="5" ry="8" fill="none" stroke="#111" stroke-width="4"/>
-        <ellipse cx="106" cy="60" rx="5" ry="8" fill="none" stroke="#111" stroke-width="4"/>
-        <ellipse cx="44" cy="58" rx="9" ry="14" fill="#fff" opacity=".08"/>
-      </svg>
+      <img class="potsvg" src="pot.png" alt="Pot of gold">
       <div class="pottext"><b id="potAmt">$0</b><span id="potSub">this week’s pot</span></div>
     </div>
   </div>
