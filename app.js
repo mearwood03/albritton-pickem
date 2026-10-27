@@ -499,12 +499,22 @@ function scoreSeason() {
 const fmtKick = (ms) => new Date(ms).toLocaleString([], { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const matchup = (g) => g.away.name + ' @ ' + g.home.name;
 
+// Pot of gold: $ per entry (config.potPerEntry, default 20) × entries in the week shown.
+function renderPot() {
+  const per = Number(CFG.potPerEntry) || 20;
+  const hw = typeof histWeek === 'function' ? histWeek(S.week) : null;
+  const n = hw ? hw.rows.length : fbOn ? scoreWeek(S.week).rows.length : 0;
+  $('pot').hidden = !fbOn && !hw;
+  $('potAmt').textContent = '$' + (n * per).toLocaleString();
+  $('potSub').textContent = 'Week ' + S.week + ' pot · ' + n + ' entr' + (n === 1 ? 'y' : 'ies');
+}
 function render() {
   document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === S.tab));
   ['picks', 'board'].forEach((t) => { $('tab-' + t).hidden = t !== S.tab; });
   renderWho();
   if (!S.ready) { $('tab-' + S.tab).innerHTML = '<div class="empty">Loading this week’s games…</div>'; return; }
   $('wkLabel').textContent = 'Week ' + S.week;
+  renderPot();
   const games = S.sb[S.week];
   $('wkSub').textContent = S.season + ' season' + (S.week === S.curWeek ? ' · this week' : '');
   $('prevWk').disabled = S.week <= 1;

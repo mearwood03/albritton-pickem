@@ -13,6 +13,8 @@ window.PICKEM_CONFIG = {
   venmo: "Blakealbritton6",
   // Shown next to the Venmo button. Leave "" to hide.
   entryFee: "$21 entry",
+  // Pot of gold at the top: this many dollars per entry in the week shown.
+  potPerEntry: 20,
   // Tuesday that Week 1 starts (Eastern). The site opens on the current week and turns over each Tuesday.
   week1Start: "2026-09-08",
   // Through this week, each game locked at its own kickoff. From the next week on, everything locks
