@@ -362,21 +362,41 @@ async function loadCurrent() {
 }
 const byKick = (a, b) => a.kick - b.kick || a.id.localeCompare(b.id);
 const cacheKey = (w) => 'ape:sb2:' + S.season + ':' + w;
+// Ways to ask ESPN for one week's games, tried in order until one gives back the right games.
+function weekUrls(w) {
+  const urls = [ESPN + '?seasontype=2&week=' + w + '&dates=' + S.season, ESPN + '?seasontype=2&week=' + w];
+  const start = Date.parse((CFG.week1Start || '') + 'T12:00:00Z'); // that week's Tuesday … Monday, by date
+  if (start) {
+    const day = (n) => new Date(start + ((w - 1) * 7 + n) * 864e5).toISOString().slice(0, 10).replace(/-/g, '');
+    urls.push(ESPN + '?dates=' + day(0) + '-' + day(6));
+  }
+  return urls;
+}
+// A week's games are right if they include games people picked that week (when anyone has).
+function looksRight(w, games) {
+  if (!games.length) return false;
+  const picked = new Set();
+  S.docs.forEach((d) => { if (d.week === w) Object.keys(d.picks).forEach((g) => picked.add(g)); });
+  return !picked.size || games.some((g) => picked.has(g.id));
+}
 async function loadWeek(w, force) {
   if (!force && S.sb[w]) return S.sb[w];
   if (!S.sb[w]) {
     try { const c = JSON.parse(localStorage.getItem(cacheKey(w)) || 'null'); if (c) { S.sb[w] = c; if (!force) return c; } } catch (e) {}
   }
-  try {
-    const d = await fetchJSON(ESPN + '?seasontype=2&week=' + w + '&dates=' + S.season);
-    const games = (d.events || []).map(norm).sort(byKick);
-    S.sb[w] = games;
-    if (w === S.week || w === S.curWeek) S.updated = Date.now();
-    // Finished weeks never change, so keep them for the season standings.
-    if (games.length && games.every((g) => g.final || g.void)) {
+  for (const url of weekUrls(w)) {
+    try {
+      const d = await fetchJSON(url);
+      const games = (d.events || []).map(norm).sort(byKick);
+      if (!looksRight(w, games)) continue;
+      S.sb[w] = games;
+      if (w === S.week || w === S.curWeek) S.updated = Date.now();
+      // Keep a copy so the season standings still work if ESPN is down later.
       try { localStorage.setItem(cacheKey(w), JSON.stringify(games)); } catch (e) {}
-    }
-  } catch (e) { console.warn(e); if (!S.sb[w]) S.sb[w] = null; }
+      return games;
+    } catch (e) { console.warn('ESPN week ' + w, e); }
+  }
+  if (!S.sb[w]) S.sb[w] = null;
   return S.sb[w];
 }
 // The whole week locks at its first kickoff (Thursday night). Picks saved after that don't count.
@@ -478,13 +498,14 @@ function histWeek(w) {
 }
 const histWeeks = () => Object.keys(HIST.weeks || {}).map(Number);
 function seasonWeeks() {
-  const site = [...new Set(S.docs.map((d) => d.week))].filter((w) => S.sb[w] && !(HIST.weeks || {})[w]);
+  const site = [...new Set(S.docs.map((d) => d.week))].filter((w) => !(HIST.weeks || {})[w]);
   return [...new Set(histWeeks().concat(site))].sort((a, b) => a - b);
 }
 const weekResult = (w) => histWeek(w) || scoreWeek(w);
 function scoreSeason() {
   const tot = {};
   seasonWeeks().forEach((w) => {
+    if (!(HIST.weeks || {})[w] && !S.sb[w]) return; // scores not loaded yet
     const s = weekResult(w);
     s.rows.forEach((r) => {
       const t = tot[r.uid] || (tot[r.uid] = { uid: r.uid, w: 0, l: 0, weeks: 0, won: 0 });
@@ -763,7 +784,7 @@ function seasonSheetHtml() {
   if (!rows.length) return '<div class="empty">No picks yet this season.</div>';
   const weeks = seasonWeeks();
   const per = {};
-  weeks.forEach((w) => { per[w] = weekResult(w); });
+  weeks.forEach((w) => { per[w] = (HIST.weeks || {})[w] || S.sb[w] ? weekResult(w) : null; });
   let h = '<div class="tablewrap"><table class="sheet"><thead><tr><th class="rank">#</th><th class="name">Player</th><th class="tot">W</th><th class="tot">L</th><th class="tot">Pct</th><th class="tot">🏆</th>';
   weeks.forEach((w) => { h += '<th class="tot">Wk ' + w + '</th>'; });
   h += '</tr></thead><tbody>';
@@ -773,6 +794,7 @@ function seasonSheetHtml() {
     h += '<tr class="' + (me ? 'mine' : '') + '"><td class="rank">' + r.rank + '</td><td class="name">' + esc(nameOf(r.uid)) + '</td>'
       + '<td class="tot w">' + r.w + '</td><td class="tot l">' + r.l + '</td><td class="tot">' + pct + '</td><td class="tot">' + (r.won || '–') + '</td>';
     weeks.forEach((w) => {
+      if (!per[w]) { h += '<td class="c none" title="Loading this week’s scores…">…</td>'; return; }
       const wr = per[w].rows.find((x) => x.uid === r.uid);
       if (!wr) { h += '<td class="c none">–</td>'; return; }
       const won = per[w].winners.includes(r.uid);
