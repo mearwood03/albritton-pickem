@@ -27,6 +27,34 @@ window.PICKEM_HISTORY = {
     'Brandon Lanier': 'Brandon',
     'Trey Hood': 'Papi',
   },
+  // Spreadsheet name → that person's site account id. Pins weeks 1–5 to their account, so it keeps
+  // working if they change the name they use on the site. (Used before the name-based aliases above.)
+  accounts: {
+    'Alex Bull': 'DAIGFTIgfKRgxnTVGqaiWW5sJp23',
+    'Anthony M': 'XLZZSmzkurN6oy3v0yWYnKt99GB3',
+    'Barry Lanier': 'N9nmOnFYLbalWlb57jCagCsnNm23',
+    'Ben Hoversland': 'b7djiTSaDTZvqtwmWYbIi1AWcmr1',
+    'Blake Albritton': 'O1NCQ8eaSsSewIjbXQrqJGhT3X13',
+    'Brandon Lanier': 'cHNoP7J5ZJPmuozj1tmewu11cJ93',
+    'Dave Rano': '7bJxZj4mHDZVDN9JujzljVK30jI3',
+    'Duane Wisor': 'An4vzrErXzZkrn1K6TtYX2q67A43',
+    'Dwight Samuel': '2eQ8RZfEwJTGBq9jEKmm0UL9J1G2',
+    'Eddie Yoho': 'bbK6fVFXuoS7xcZ9cYfqoKzIO9f1',
+    'Ethan C': 'No3VEFkanLTDNXLC0ur3MUXfoQN2',
+    'Evan Collins': 'BmwE80vribU8MVQoC9K4BIagcYg2',
+    'Henry Albritton': 'kdcV9uFqGhTXFcg1TuS6oafMA733',
+    'JR Harrington': 'jEhg7JifxqN6jFEwOLhnDn5Y9qq2',
+    'Jason Hill': '0i0mH1kcQHRuqh4IuuXf6VmJXHI2',
+    'Kyler Nowling': 'r2f1bHlroCV0zqAulxd38tBO1tO2',
+    'Micah Earwood': 'auwHWBUnVuTEj3AjSEwQ8ppUm6C2',
+    'Mike Puffer': 'rnkXMhuBJJNcLORNj6Zv6pg61Rp2',
+    'Rachel Collins': 'clIKI0TPloR0H6g3m9dtHirbxHH3',
+    'Ryan Griffith': 'nLn5TC28GOZCwn3k2zFzYuoJ48E3',
+    'Scott Cole': 'aW0gHorKCdQUi9358wyLSLdmUbc2',
+    'Tim Martin': 'PJBMubOILYQu6sMLfTnKkhcoL5s1',
+    'Trey Hood': 'Vzqp1bVNDERBskWTnmpsOdSlfqG3',
+    'Triston Allen': '0OM2O0Iw8VhgvSGkd6Gk1KHG0Nu1',
+  },
   // Weekly winners set by hand for weeks played on the site (use the name shown on the site).
   // Overrides what the site works out from the scores and tiebreaker.
   winnerOverrides: {

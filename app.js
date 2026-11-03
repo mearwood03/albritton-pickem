@@ -463,6 +463,8 @@ const HIST = window.PICKEM_HISTORY || { weeks: {}, aliases: {} };
 function histKey(name) {
   const base = String(name).replace(/\s*#\d+$/, '');
   const second = base !== name;
+  const pinned = (HIST.accounts || {})[base];
+  if (!second && pinned && S.players[pinned]) return pinned;
   const site = String((HIST.aliases || {})[base] || base).toLowerCase();
   const uid = !second && Object.keys(S.players).find((u) => String(S.players[u].name || '').trim().toLowerCase() === site);
   return uid || 'h:' + name;
