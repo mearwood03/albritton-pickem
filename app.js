@@ -20,7 +20,8 @@ const S = {
   sb: {}, // week -> games[]
   tab: 'picks', boardView: 'week', updated: 0, ready: false, busy: false,
   drafts: {}, draftName: null, saving: false, // unsaved changes, kept until the one Save button
-  rawDocs: [], adminEdit: null, // commissioner's pick editor: { uid, picks: {}, tb }
+  rawDocs: [], adminEdit: null, results: {}, // results: saved final scores, '<season>-<week>' -> doc
+  // commissioner's pick editor: { uid, picks: {}, tb }
 };
 try { S.tab = localStorage.getItem('ape:tab') === 'board' ? 'board' : 'picks'; } catch (e) {}
 
@@ -58,7 +59,7 @@ function toast(msg) {
 
 /* ---------------- Firebase ---------------- */
 const fbOn = !!(CFG.firebase && CFG.firebase.apiKey && !/PASTE/.test(CFG.firebase.apiKey) && window.firebase);
-let auth = null, db = null, FV = null, seasonUnsub = null, statusUnsub = null;
+let auth = null, db = null, FV = null, seasonUnsub = null, statusUnsub = null, resultsUnsub = null;
 if (fbOn) {
   firebase.initializeApp(CFG.firebase);
   auth = firebase.auth();
@@ -68,6 +69,7 @@ if (fbOn) {
     const email = u && u.email ? u.email.toLowerCase() : '';
     S.admin = !!(u && email === ADMIN_EMAIL && u.emailVerified);
     S.user = u && email.endsWith('@' + PLAYER_DOMAIN) ? u : null;
+    if (S.user || S.admin) Object.keys(S.sb).forEach((w) => saveResults(Number(w), S.sb[w]));
     render();
   });
   db.collection('players').onSnapshot((snap) => {
@@ -88,6 +90,13 @@ function subscribeSeason() {
     snap.forEach((d) => { S.status[d.id] = d.data(); });
     mergeDocs(); render();
   }, (e) => { console.warn('status', e); });
+  // Final scores saved by players' browsers as games finish, so past weeks don't depend on ESPN.
+  resultsUnsub = db.collection('results').where('season', '==', S.season).onSnapshot((snap) => {
+    S.results = {};
+    snap.forEach((d) => { S.results[d.id] = d.data(); });
+    Object.keys(S.results).forEach((id) => { const w = S.results[id].week; if (!S.sb[w]) { const g = resultsGames(w); if (g) S.sb[w] = g; } });
+    render();
+  }, (e) => { console.warn('results', e); });
 }
 // Blake's changes live in the status doc (fixPicks = { gameId: team }, fixTb) and always count,
 // whatever time he makes them. They sit on top of the player's own picks.
@@ -340,6 +349,33 @@ function norm(e) {
     tv: ((c.broadcasts || [])[0] && c.broadcasts[0].names || []).join('/'),
   };
 }
+// Saved results -> the same game shape ESPN data is turned into (all final).
+function resultsGames(w) {
+  const d = S.results[wkKey(w)] || ((window.PICKEM_HISTORY || {}).results || {})[wkKey(w)];
+  if (!d) return null;
+  const games = Object.keys(d).filter((k) => k.startsWith('g_')).map((k) => {
+    const r = d[k];
+    const team = (abbr, name, full, score) => ({ abbr, name: name || abbr, full: full || name || abbr, city: '',
+      logo: abbr ? 'https://a.espncdn.com/i/teamlogos/nfl/500/' + String(abbr).toLowerCase() + '.png' : '', color: '#5b6b80',
+      score: score == null ? null : Number(score), winner: r.w === abbr, record: '' });
+    return { id: k.slice(2), kick: Number(r.k), state: 'post', detail: r.v ? 'Postponed' : 'Final', final: true, void: !!r.v,
+      home: team(r.h, r.hn, r.hf, r.hs), away: team(r.a, r.an, r.af, r.as), odds: null, prob: null, down: '', tv: '' };
+  });
+  return games.length ? games.sort(byKick) : null;
+}
+// Save any newly finished games for week w (players and the commissioner do this as they browse).
+function saveResults(w, games) {
+  if (!fbOn || !db || !(S.user || S.admin) || !games || !S.season) return;
+  const have = S.results[wkKey(w)] || {};
+  const patch = {};
+  games.forEach((g) => {
+    if (!(g.final || g.void) || have['g_' + g.id]) return;
+    patch['g_' + g.id] = { h: g.home.abbr, hn: g.home.name, hf: g.home.full, hs: g.home.score, a: g.away.abbr, an: g.away.name, af: g.away.full,
+      as: g.away.score, w: winnerOf(g) || '', k: g.kick, v: !!g.void };
+  });
+  if (!Object.keys(patch).length) return;
+  db.collection('results').doc(wkKey(w)).set(Object.assign({ season: S.season, week: w }, patch), { merge: true }).catch((e) => console.warn('results save', e));
+}
 async function fetchJSON(url) {
   const r = await fetch(url, { cache: 'no-store' });
   if (!r.ok) throw new Error('ESPN ' + r.status);
@@ -357,14 +393,16 @@ async function loadCurrent() {
   S.season = (d.season && d.season.year) || (d.leagues && d.leagues[0] && d.leagues[0].season && d.leagues[0].season.year) || new Date().getFullYear();
   const type = d.season && d.season.type;
   const n = (d.week && d.week.number) || 1;
+  if (type === 2) S.espnWeek = Math.min(n, WEEKS);
   S.curWeek = weekByDate() || (type === 2 ? Math.min(n, WEEKS) : type === 1 ? 1 : WEEKS);
-  if (type === 2) { S.sb[Math.min(n, WEEKS)] = (d.events || []).map(norm).sort(byKick); S.updated = Date.now(); }
+  if (type === 2) { S.sb[Math.min(n, WEEKS)] = (d.events || []).map(norm).sort(byKick); S.updated = Date.now(); saveResults(Math.min(n, WEEKS), S.sb[Math.min(n, WEEKS)]); }
 }
 const byKick = (a, b) => a.kick - b.kick || a.id.localeCompare(b.id);
 const cacheKey = (w) => 'ape:sb2:' + S.season + ':' + w;
 // Ways to ask ESPN for one week's games, tried in order until one gives back the right games.
 function weekUrls(w) {
   const urls = [ESPN + '?seasontype=2&week=' + w + '&dates=' + S.season, ESPN + '?seasontype=2&week=' + w];
+  if (w === S.espnWeek) urls.unshift(ESPN); // ESPN's own "this week" request
   const start = Date.parse((CFG.week1Start || '') + 'T12:00:00Z'); // that week's Tuesday … Monday, by date
   if (start) {
     const day = (n) => new Date(start + ((w - 1) * 7 + n) * 864e5).toISOString().slice(0, 10).replace(/-/g, '');
@@ -393,10 +431,11 @@ async function loadWeek(w, force) {
       if (w === S.week || w === S.curWeek) S.updated = Date.now();
       // Keep a copy so the season standings still work if ESPN is down later.
       try { localStorage.setItem(cacheKey(w), JSON.stringify(games)); } catch (e) {}
+      saveResults(w, games);
       return games;
     } catch (e) { console.warn('ESPN week ' + w, e); }
   }
-  if (!S.sb[w]) S.sb[w] = null;
+  if (!S.sb[w]) S.sb[w] = resultsGames(w);
   return S.sb[w];
 }
 // The whole week locks at its first kickoff (Thursday night). Picks saved after that don't count.
@@ -872,6 +911,7 @@ async function tick() {
   if (document.hidden) { schedule(); return; }
   await loadWeek(S.week, true);
   if (S.curWeek !== S.week && S.docs.some((d) => d.week === S.curWeek)) await loadWeek(S.curWeek, true);
+  [S.week, S.curWeek].forEach((w) => saveResults(w, S.sb[w]));
   render();
   schedule();
 }

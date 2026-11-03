@@ -30,6 +30,19 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Final scores, one doc per week, id "<season>-<week>", fields g_<gameId> = that game's result.
+    // Players' browsers add games as they finish; nobody but Blake can change one once it's saved.
+    match /results/{id} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.season is int && request.resource.data.week is int
+        && id == string(request.resource.data.season) + '-' + string(request.resource.data.week);
+      allow update: if isAdmin() || (request.auth != null
+        && request.resource.data.diff(resource.data).changedKeys().size() == 0
+        && request.resource.data.diff(resource.data).removedKeys().size() == 0);
+      allow delete: if isAdmin();
+    }
+
     // One pick sheet per player per week, id "<season>-<week>_<uid>".
     //   g_<gameId> = team picked,       at_<gameId> = server time it was picked
     //   tb         = tiebreaker,        at_tb       = server time it was set
