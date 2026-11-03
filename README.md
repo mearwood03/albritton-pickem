@@ -46,6 +46,10 @@ blakealbritton6@gmail.com.
   **Save**. Blake's changes count no matter when he makes them, even after the week
   locks, and show a ✎ on the leaderboard. He can also enter picks for someone who
   never submitted any (e.g. they texted them in).
+- **Enter a week's results:** if a week has no scores on the site (e.g. Weeks 6–7, played
+  before the site saved results), the Leaderboard shows Blake **Enter Week N results**: tap
+  each game's winner, mark the MNF game and type its score, then **Save**. Since Week 8 the
+  site saves final scores automatically as games finish.
 - **Add a new person:** in the Edit picks player list choose **+ Add a new person…**,
   type their name, tap **Add to the pool**, then enter their picks. They have no login;
   if they later sign in with their phone they'll show up as a separate entry, so Blake

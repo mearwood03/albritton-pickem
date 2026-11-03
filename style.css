@@ -306,3 +306,14 @@ h1 {
   .potsvg { height: 60px; width: auto; }
   .pottext b { font-size: 26px; }
 }
+
+/* commissioner: enter a week's results */
+.resgames { display: grid; gap: 6px; margin: 10px 0 14px; }
+.resrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 4px; border-radius: 10px; }
+.resrow.mnf { background: rgba(251, 79, 20, .12); }
+.resrow .edt { flex: 0 0 auto; min-width: 64px; }
+.resopp { width: 70px; background: var(--navy); border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px; font-size: 14px; text-transform: uppercase; }
+.mnfbtn { background: none; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 11px; padding: 4px 9px; margin-left: auto; }
+.mnfbtn.on { background: var(--orange); border-color: var(--orange); color: #fff; }
+.mnfsc { display: flex; gap: 8px; align-items: center; font-weight: 700; width: 100%; padding-left: 36px; }
+.mnfsc input { width: 64px; background: var(--navy); border: 1px solid var(--line); border-radius: 9px; padding: 6px; font-size: 16px; text-align: center; }

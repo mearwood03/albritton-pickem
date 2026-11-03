@@ -420,7 +420,7 @@ function looksRight(w, games) {
 async function loadWeek(w, force) {
   if (!force && S.sb[w]) return S.sb[w];
   if (!S.sb[w]) {
-    try { const c = JSON.parse(localStorage.getItem(cacheKey(w)) || 'null'); if (c) { S.sb[w] = c; if (!force) return c; } } catch (e) {}
+    try { const c = JSON.parse(localStorage.getItem(cacheKey(w)) || 'null'); if (c) { S.sb[w] = c; saveResults(w, c); if (!force) return c; } } catch (e) {}
   }
   for (const url of weekUrls(w)) {
     try {
@@ -586,7 +586,13 @@ function render() {
   if (S.admin) notes.push('You’re signed in as <b>commissioner</b>. Mark who paid, edit anyone’s picks, or remove people on the Leaderboard tab. <button class="btn sm ghost" data-act="logout">Sign out</button>');
   $('notice').innerHTML = notes.join('<br>');
   $('notice').hidden = !notes.length;
-  if (games === null) { $('tab-' + S.tab).innerHTML = '<div class="empty">Couldn’t reach ESPN for this week. It will try again shortly.</div>'; return; }
+  if (games === null) {
+    if (S.admin && S.tab === 'board' && S.docs.some((d) => d.week === S.week)) { $('tab-board').innerHTML = resultsFormHtml(S.week); return; }
+    $('tab-' + S.tab).innerHTML = '<div class="empty">' + (S.docs.some((d) => d.week === S.week)
+      ? 'Week ' + S.week + ' results aren’t on the site yet. Blake can enter them from the Leaderboard (Commissioner).'
+      : 'Couldn’t load this week’s games. It will try again shortly.') + '</div>';
+    return;
+  }
   if (!games || !games.length) { $('tab-' + S.tab).innerHTML = '<div class="empty">No games found for this week yet.</div>'; return; }
   if (S.tab === 'picks') renderPicks(games);
   else renderBoard(games);
@@ -612,6 +618,9 @@ document.addEventListener('click', (e) => {
   else if (act === 'edit') openEditor(a.dataset.u);
   else if (act === 'edclose') { S.adminEdit = null; render(); }
   else if (act === 'edadd') addPerson($('edNewName') && $('edNewName').value);
+  else if (act === 'reswin') { resEdit(S.week).win[a.dataset.g] = a.dataset.t; render(); }
+  else if (act === 'resmnf') { resEdit(S.week).mnf = a.dataset.g; render(); }
+  else if (act === 'ressave') saveEnteredResults(S.week);
   else if (act === 'edsave') saveEditor();
   else if (act === 'edpick' && S.adminEdit) {
     const gid = a.dataset.g, team = a.dataset.t;
@@ -629,6 +638,7 @@ document.addEventListener('click', (e) => {
   }
 });
 document.addEventListener('change', (e) => {
+  if (e.target.dataset && e.target.dataset.res) { const r = resEdit(S.week); r[e.target.dataset.res][e.target.dataset.g] = e.target.value.trim().toUpperCase(); if (e.target.dataset.res === 'opp') render(); return; }
   if (e.target.id === 'edPlayer') { S.adminEdit = { uid: e.target.value, picks: {}, tb: null }; render(); return; }
   if (e.target.id !== 'paidBox' || !S.user) return;
   const sh = mySheet(S.week);
@@ -846,6 +856,57 @@ function seasonSheetHtml() {
   return h;
 }
 
+// Commissioner: enter a week's results by hand (for weeks the site has no scores for).
+// Games and teams come from what players picked that week.
+const resEdit = (w) => (S.resEdit && S.resEdit.w === w ? S.resEdit : (S.resEdit = { w, win: {}, opp: {}, sc: {}, mnf: null }));
+function pickedGames(w) {
+  const g = {};
+  S.docs.forEach((d) => { if (d.week === w) Object.keys(d.picks).forEach((id) => { (g[id] = g[id] || new Set()).add(d.picks[id].team); }); });
+  return Object.keys(g).sort().map((id) => ({ id, teams: [...g[id]].sort() }));
+}
+function resultsFormHtml(w) {
+  const r = resEdit(w), games = pickedGames(w);
+  if (!r.mnf && games.length) r.mnf = games[games.length - 1].id;
+  let h = '<div class="card editor"><h3>Enter Week ' + w + ' results</h3>'
+    + '<p class="muted">The site doesn’t have this week’s scores. Tap the winner of each game (teams are the ones players picked). Mark which game was Monday Night Football and enter its score for the tiebreaker. Only you can do this.</p><div class="resgames">';
+  games.forEach((g, i) => {
+    const t = g.teams.slice(0, 2);
+    const opp = t.length < 2 ? '<input class="resopp" data-res="opp" data-g="' + esc(g.id) + '" maxlength="4" placeholder="vs ?" value="' + esc(r.opp[g.id] || '') + '">' : '';
+    const teams = t.length < 2 ? t.concat(r.opp[g.id] ? [r.opp[g.id]] : []) : t;
+    const btn = (x) => '<button class="edt' + (r.win[g.id] === x ? ' on' : '') + '" data-act="reswin" data-g="' + esc(g.id) + '" data-t="' + esc(x) + '">' + esc(x) + '</button>';
+    const mnf = r.mnf === g.id;
+    h += '<div class="resrow' + (mnf ? ' mnf' : '') + '"><span class="edwhen">' + (i + 1) + '</span>' + teams.map(btn).join('<span class="at">vs</span>') + opp + btn('TIE')
+      + '<button class="mnfbtn' + (mnf ? ' on' : '') + '" data-act="resmnf" data-g="' + esc(g.id) + '">MNF</button>'
+      + (mnf ? '<span class="mnfsc">' + teams.map((x) => esc(x) + ' <input type="number" inputmode="numeric" min="0" max="99" data-res="sc" data-g="' + esc(x) + '" value="' + esc(r.sc[x] != null ? r.sc[x] : '') + '">').join(' ') + '</span>' : '')
+      + '</div>';
+  });
+  return h + '</div><button class="btn" data-act="ressave">Save Week ' + w + ' results</button></div>';
+}
+async function saveEnteredResults(w) {
+  const r = resEdit(w), games = pickedGames(w);
+  // Kickoff times aren't known; use Sunday 1pm ET for every game and Monday 8:15pm ET for MNF, so picks
+  // saved before the real Thursday lock still count and the MNF game is the week's last (tiebreaker).
+  const tue = Date.parse((CFG.week1Start || '2026-09-08') + 'T00:00:00-04:00') + (w - 1) * 7 * 864e5;
+  const sun = tue + 5 * 864e5 + 13 * 36e5, mon = tue + 6 * 864e5 + 20.25 * 36e5;
+  const patch = { season: S.season, week: w };
+  for (const g of games) {
+    const teams = g.teams.length < 2 ? g.teams.concat(r.opp[g.id] ? [r.opp[g.id]] : []) : g.teams.slice(0, 2);
+    if (teams.length < 2) return toast('Game ' + (games.indexOf(g) + 1) + ': type the other team.');
+    let win = r.win[g.id];
+    let hs = null, as = null;
+    if (g.id === r.mnf) {
+      hs = parseInt(r.sc[teams[1]], 10); as = parseInt(r.sc[teams[0]], 10);
+      if (!(hs >= 0 && as >= 0)) return toast('Enter both teams’ MNF points.');
+      win = hs === as ? 'TIE' : hs > as ? teams[1] : teams[0];
+    }
+    if (!win) return toast('Game ' + (games.indexOf(g) + 1) + ': tap the winner.');
+    patch['g_' + g.id] = { h: teams[1], hn: teams[1], hf: teams[1], hs, a: teams[0], an: teams[0], af: teams[0], as, w: win === 'TIE' ? '' : win, k: g.id === r.mnf ? mon : sun, v: false };
+  }
+  try {
+    await db.collection('results').doc(wkKey(w)).set(patch);
+    S.resEdit = null; toast('Week ' + w + ' results saved.');
+  } catch (e) { console.warn(e); toast('Couldn’t save. Are you still signed in as commissioner?' + why(e)); }
+}
 function editorHtml(games) {
   const ed = S.adminEdit;
   const ids = Object.keys(S.players).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
