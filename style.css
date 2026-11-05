@@ -317,3 +317,5 @@ h1 {
 .mnfbtn.on { background: var(--orange); border-color: var(--orange); color: #fff; }
 .mnfsc { display: flex; gap: 8px; align-items: center; font-weight: 700; width: 100%; padding-left: 36px; }
 .mnfsc input { width: 64px; background: var(--navy); border: 1px solid var(--line); border-radius: 9px; padding: 6px; font-size: 16px; text-align: center; }
+
+.savecard .withdraw { display: block; margin: 12px auto 0; }

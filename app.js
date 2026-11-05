@@ -125,7 +125,7 @@ function parseSheet(d) {
       picks[id] = { team: d[k], at: tsMs(d['at_' + id]) };
     }
   });
-  return { uid: d.uid, week: d.week, season: d.season, picks, tb: typeof d.tb === 'number' ? d.tb : null, tbAt: tsMs(d.at_tb), paid: d.paid === true };
+  return { uid: d.uid, week: d.week, season: d.season, picks, tb: typeof d.tb === 'number' ? d.tb : null, tbAt: tsMs(d.at_tb), paid: d.paid === true, out: d.paid === false };
 }
 const tsMs = (t) => (t && t.toMillis ? t.toMillis() : t ? Number(t) : Date.now());
 const wkKey = (w) => S.season + '-' + w;
@@ -186,6 +186,17 @@ function tapPick(g, team) {
   const d = draft(S.week);
   if (team === saved) delete d.picks[g.id]; else d.picks[g.id] = team;
   render();
+}
+// "Not playing this week": turns the paid box back off, which takes this player out of the week
+// (leaderboard and pot). Their picks stay saved; checking "I've paid" and saving puts them back in.
+async function withdraw() {
+  if (!S.user || weekLocked(S.sb[S.week])) return;
+  if (!confirm('Take yourself out of Week ' + S.week + '? You won’t be on the leaderboard or in the pot. You can rejoin before Thursday kickoff by checking “I’ve paid” and saving.')) return;
+  try {
+    await sheetRef(S.week).set(Object.assign(sheetBase(), { last: 'paid', paid: false, at_paid: FV.serverTimestamp() }), { merge: true });
+    S.drafts[S.week] = { picks: {}, tb: null, paid: null };
+    toast('You’re out of Week ' + S.week + '.');
+  } catch (e) { console.warn(e); toast('Couldn’t do that. Try again.' + why(e)); }
 }
 async function saveAll() {
   if (!S.user || S.saving) return;
@@ -469,7 +480,9 @@ function scoreWeek(w) {
   const tbTotal = tbg && (tbg.final || isLive(tbg)) ? total(tbg) : null;
   const done = games.length > 0 && games.every((g) => g.final || g.void);
   const cutoff = weekLock(games);
-  const rows = S.docs.filter((d) => d.week === w && !isRemoved(w, d.uid) && (Object.keys(d.picks).length || d.tb != null)).map((d) => {
+  // A player who tapped "Not playing this week" (paid box turned back off) isn't an entry, unless Blake entered picks for them.
+  const withdrawn = (d) => d.out && !Object.values(d.picks).some((p) => p.fixed);
+  const rows = S.docs.filter((d) => d.week === w && !isRemoved(w, d.uid) && !withdrawn(d) && (Object.keys(d.picks).length || d.tb != null)).map((d) => {
     const r = { uid: d.uid, w: 0, l: 0, live: 0, pend: 0, made: 0, tb: null, diff: null, paid: d.paid, rem: {} };
     Object.keys(d.picks).forEach((gid) => {
       const g = byId[gid]; const p = d.picks[gid];
@@ -613,6 +626,7 @@ document.addEventListener('click', (e) => {
     const g = (S.sb[S.week] || []).find((x) => x.id === a.dataset.g);
     if (g) tapPick(g, a.dataset.t);
   } else if (act === 'save') saveAll();
+  else if (act === 'withdraw') withdraw();
   else if (act === 'bv') { S.boardView = a.dataset.v; render(); }
   else if (act === 'confirm') setStatus(a.dataset.u, { confirmed: a.dataset.on === '1' });
   else if (act === 'edit') openEditor(a.dataset.u);
@@ -729,6 +743,8 @@ function renderPicks(games) {
     h += '<div class="card namecard"><label for="nameBox"><b>Your name</b><span class="muted">Shown on the leaderboard</span></label>'
       + '<div class="nameRow"><input id="nameBox" maxlength="30" autocomplete="name" value="' + esc(nameVal) + '"></div></div>';
     if (removed) h += '<div class="notice">Blake removed you from Week ' + S.week + '. If you’ve paid, text him and he can add you back.</div>';
+    else if (sheet && sheet.out && !weekLocked(games)) h += '<div class="notice">You’re not entered in Week ' + S.week + '. To play, check “I’ve paid” and tap Save at the bottom.</div>';
+    else if (sheet && sheet.out) h += '<div class="notice">You didn’t play Week ' + S.week + '.</div>';
     h += '<label class="card paidcard' + (paid ? ' on' : '') + '"><input type="checkbox" id="paidBox"' + (paid ? ' checked' : '') + (removed ? ' disabled' : '') + '>'
       + '<span><b>I’ve paid my ' + esc(feeAmt || 'entry') + ' for Week ' + S.week + '</b><span class="muted">Venmo <a href="https://venmo.com/u/' + esc(encodeURIComponent(venmo)) + '" target="_blank" rel="noopener">@' + esc(venmo) + '</a>. Required to save your picks.</span></span></label>';
     h += '<div class="card summary"><div class="progress"><b>' + made + ' of ' + games.length + ' picked</b>'
@@ -754,7 +770,11 @@ function renderPicks(games) {
     }
   });
   h += '</div>';
-  if (fbOn && S.user && !removed && !locked) h += '<div class="card savecard">' + saveBarHtml() + '</div>';
+  if (fbOn && S.user && !removed && !locked) {
+    const entered = sheet && !sheet.out && (Object.keys(sheet.picks).length || sheet.tb != null);
+    h += '<div class="card savecard">' + saveBarHtml()
+      + (entered ? '<button class="linkbtn withdraw" data-act="withdraw">Not playing this week? Take me out of Week ' + S.week + '</button>' : '') + '</div>';
+  }
   $('tab-picks').innerHTML = h;
   [['loginName', ln], ['loginPhone', lp]].forEach(([id, k]) => { if (k.focus && $(id)) $(id).focus(); });
   if ((focus === 'nameBox' || focus === 'tbInput') && $(focus) && !$(focus).disabled) {
