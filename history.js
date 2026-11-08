@@ -55,10 +55,62 @@ window.PICKEM_HISTORY = {
     'Trey Hood': 'Vzqp1bVNDERBskWTnmpsOdSlfqG3',
     'Triston Allen': '0OM2O0Iw8VhgvSGkd6Gk1KHG0Nu1',
   },
-  // Weekly winners set by hand for weeks played on the site (use the name shown on the site).
+  // Weekly winners set by hand for weeks played on the site (site account id, or the name shown on the site).
   // Overrides what the site works out from the scores and tiebreaker.
   winnerOverrides: {
-    6: ['Papi'], // Trey Hood
+    6: ['Vzqp1bVNDERBskWTnmpsOdSlfqG3'], // Trey Hood (Papi) — site account id, so renames don't matter
+  },
+  // Final scores for weeks played on the site before it saved results itself (from ESPN, all final).
+  // h/a = home/away team, hs/as = points, w = winner ('' = tie), k = kickoff (ms).
+  results: {
+    '2026-6': {
+      g_401872995: {"h": "DEN", "hn": "Broncos", "hf": "Denver Broncos", "hs": 17, "a": "SEA", "an": "Seahawks", "af": "Seattle Seahawks", "as": 14, "w": "DEN", "k": 1792109700000, "v": false},
+      g_401872996: {"h": "JAX", "hn": "Jaguars", "hf": "Jacksonville Jaguars", "hs": 31, "a": "HOU", "an": "Texans", "af": "Houston Texans", "as": 34, "w": "HOU", "k": 1792330200000, "v": false},
+      g_401872999: {"h": "ATL", "hn": "Falcons", "hf": "Atlanta Falcons", "hs": 23, "a": "CHI", "an": "Bears", "af": "Chicago Bears", "as": 31, "w": "CHI", "k": 1792342800000, "v": false},
+      g_401872997: {"h": "CLE", "hn": "Browns", "hf": "Cleveland Browns", "hs": 13, "a": "BAL", "an": "Ravens", "af": "Baltimore Ravens", "as": 10, "w": "CLE", "k": 1792342800000, "v": false},
+      g_401873003: {"h": "IND", "hn": "Colts", "hf": "Indianapolis Colts", "hs": 20, "a": "TEN", "an": "Titans", "af": "Tennessee Titans", "as": 26, "w": "TEN", "k": 1792342800000, "v": false},
+      g_401873001: {"h": "NE", "hn": "Patriots", "hf": "New England Patriots", "hs": 26, "a": "NYJ", "an": "Jets", "af": "New York Jets", "as": 19, "w": "NE", "k": 1792342800000, "v": false},
+      g_401873000: {"h": "NYG", "hn": "Giants", "hf": "New York Giants", "hs": 27, "a": "NO", "an": "Saints", "af": "New Orleans Saints", "as": 34, "w": "NO", "k": 1792342800000, "v": false},
+      g_401872998: {"h": "PHI", "hn": "Eagles", "hf": "Philadelphia Eagles", "hs": 14, "a": "CAR", "an": "Panthers", "af": "Carolina Panthers", "as": 25, "w": "CAR", "k": 1792342800000, "v": false},
+      g_401873002: {"h": "TB", "hn": "Buccaneers", "hf": "Tampa Bay Buccaneers", "hs": 19, "a": "PIT", "an": "Steelers", "af": "Pittsburgh Steelers", "as": 26, "w": "PIT", "k": 1792342800000, "v": false},
+      g_401873004: {"h": "LAR", "hn": "Rams", "hf": "Los Angeles Rams", "hs": 16, "a": "ARI", "an": "Cardinals", "af": "Arizona Cardinals", "as": 18, "w": "ARI", "k": 1792353900000, "v": false},
+      g_401873006: {"h": "KC", "hn": "Chiefs", "hf": "Kansas City Chiefs", "hs": 22, "a": "LAC", "an": "Chargers", "af": "Los Angeles Chargers", "as": 6, "w": "KC", "k": 1792355100000, "v": false},
+      g_401873005: {"h": "LV", "hn": "Raiders", "hf": "Las Vegas Raiders", "hs": 30, "a": "BUF", "an": "Bills", "af": "Buffalo Bills", "as": 33, "w": "BUF", "k": 1792355100000, "v": false},
+      g_401873007: {"h": "GB", "hn": "Packers", "hf": "Green Bay Packers", "hs": 23, "a": "DAL", "an": "Cowboys", "af": "Dallas Cowboys", "as": 13, "w": "GB", "k": 1792369200000, "v": false},
+      g_401873008: {"h": "SF", "hn": "49ers", "hf": "San Francisco 49ers", "hs": 23, "a": "WSH", "an": "Commanders", "af": "Washington Commanders", "as": 17, "w": "SF", "k": 1792455300000, "v": false},
+    },
+    '2026-7': {
+      g_401873010: {"h": "CHI", "hn": "Bears", "hf": "Chicago Bears", "hs": 30, "a": "NE", "an": "Patriots", "af": "New England Patriots", "as": 24, "w": "CHI", "k": 1792714500000, "v": false},
+      g_401873011: {"h": "NO", "hn": "Saints", "hf": "New Orleans Saints", "hs": 10, "a": "PIT", "an": "Steelers", "af": "Pittsburgh Steelers", "as": 16, "w": "PIT", "k": 1792935000000, "v": false},
+      g_401873017: {"h": "ATL", "hn": "Falcons", "hf": "Atlanta Falcons", "hs": 29, "a": "SF", "an": "49ers", "af": "San Francisco 49ers", "as": 20, "w": "ATL", "k": 1792947600000, "v": false},
+      g_401873013: {"h": "TEN", "hn": "Titans", "hf": "Tennessee Titans", "hs": 24, "a": "CLE", "an": "Browns", "af": "Cleveland Browns", "as": 27, "w": "CLE", "k": 1792947600000, "v": false},
+      g_401873014: {"h": "MIN", "hn": "Vikings", "hf": "Minnesota Vikings", "hs": 16, "a": "IND", "an": "Colts", "af": "Indianapolis Colts", "as": 10, "w": "MIN", "k": 1792947600000, "v": false},
+      g_401873015: {"h": "NYJ", "hn": "Jets", "hf": "New York Jets", "hs": 25, "a": "MIA", "an": "Dolphins", "af": "Miami Dolphins", "as": 28, "w": "MIA", "k": 1792947600000, "v": false},
+      g_401873018: {"h": "CAR", "hn": "Panthers", "hf": "Carolina Panthers", "hs": 13, "a": "TB", "an": "Buccaneers", "af": "Tampa Bay Buccaneers", "as": 43, "w": "TB", "k": 1792947600000, "v": false},
+      g_401873012: {"h": "BAL", "hn": "Ravens", "hf": "Baltimore Ravens", "hs": 13, "a": "CIN", "an": "Bengals", "af": "Cincinnati Bengals", "as": 35, "w": "CIN", "k": 1792947600000, "v": false},
+      g_401873016: {"h": "HOU", "hn": "Texans", "hf": "Houston Texans", "hs": 21, "a": "NYG", "an": "Giants", "af": "New York Giants", "as": 27, "w": "NYG", "k": 1792947600000, "v": false},
+      g_401873019: {"h": "ARI", "hn": "Cardinals", "hf": "Arizona Cardinals", "hs": 16, "a": "DEN", "an": "Broncos", "af": "Denver Broncos", "as": 30, "w": "DEN", "k": 1792958700000, "v": false},
+      g_401873020: {"h": "DET", "hn": "Lions", "hf": "Detroit Lions", "hs": 20, "a": "GB", "an": "Packers", "af": "Green Bay Packers", "as": 17, "w": "DET", "k": 1792959900000, "v": false},
+      g_401873021: {"h": "LV", "hn": "Raiders", "hf": "Las Vegas Raiders", "hs": 21, "a": "LAR", "an": "Rams", "af": "Los Angeles Rams", "as": 35, "w": "LAR", "k": 1792959900000, "v": false},
+      g_401873022: {"h": "SEA", "hn": "Seahawks", "hf": "Seattle Seahawks", "hs": 20, "a": "KC", "an": "Chiefs", "af": "Kansas City Chiefs", "as": 3, "w": "SEA", "k": 1792974000000, "v": false},
+      g_401873009: {"h": "PHI", "hn": "Eagles", "hf": "Philadelphia Eagles", "hs": 21, "a": "DAL", "an": "Cowboys", "af": "Dallas Cowboys", "as": 38, "w": "DAL", "k": 1793060100000, "v": false},
+    },
+    '2026-8': {
+      g_401873023: {"h": "GB", "hn": "Packers", "hf": "Green Bay Packers", "hs": 27, "a": "CAR", "an": "Panthers", "af": "Carolina Panthers", "as": 19, "w": "GB", "k": 1793319300000, "v": false},
+      g_401873026: {"h": "BUF", "hn": "Bills", "hf": "Buffalo Bills", "hs": 36, "a": "BAL", "an": "Ravens", "af": "Baltimore Ravens", "as": 10, "w": "BUF", "k": 1793556000000, "v": false},
+      g_401873031: {"h": "CIN", "hn": "Bengals", "hf": "Cincinnati Bengals", "hs": 43, "a": "TEN", "an": "Titans", "af": "Tennessee Titans", "as": 36, "w": "CIN", "k": 1793556000000, "v": false},
+      g_401873024: {"h": "DAL", "hn": "Cowboys", "hf": "Dallas Cowboys", "hs": 30, "a": "ARI", "an": "Cardinals", "af": "Arizona Cardinals", "as": 33, "w": "ARI", "k": 1793556000000, "v": false},
+      g_401873030: {"h": "DET", "hn": "Lions", "hf": "Detroit Lions", "hs": 19, "a": "MIN", "an": "Vikings", "af": "Minnesota Vikings", "as": 15, "w": "DET", "k": 1793556000000, "v": false},
+      g_401873029: {"h": "NYJ", "hn": "Jets", "hf": "New York Jets", "hs": 33, "a": "LV", "an": "Raiders", "af": "Las Vegas Raiders", "as": 38, "w": "LV", "k": 1793556000000, "v": false},
+      g_401873027: {"h": "PIT", "hn": "Steelers", "hf": "Pittsburgh Steelers", "hs": 27, "a": "CLE", "an": "Browns", "af": "Cleveland Browns", "as": 6, "w": "PIT", "k": 1793556000000, "v": false},
+      g_401873025: {"h": "TB", "hn": "Buccaneers", "hf": "Tampa Bay Buccaneers", "hs": 16, "a": "ATL", "an": "Falcons", "af": "Atlanta Falcons", "as": 0, "w": "TB", "k": 1793556000000, "v": false},
+      g_401873028: {"h": "JAX", "hn": "Jaguars", "hf": "Jacksonville Jaguars", "hs": 42, "a": "IND", "an": "Colts", "af": "Indianapolis Colts", "as": 7, "w": "JAX", "k": 1793556000000, "v": false},
+      g_401873032: {"h": "LAR", "hn": "Rams", "hf": "Los Angeles Rams", "hs": 24, "a": "LAC", "an": "Chargers", "af": "Los Angeles Chargers", "as": 9, "w": "LAR", "k": 1793567100000, "v": false},
+      g_401873033: {"h": "DEN", "hn": "Broncos", "hf": "Denver Broncos", "hs": 28, "a": "KC", "an": "Chiefs", "af": "Kansas City Chiefs", "as": 24, "w": "DEN", "k": 1793568300000, "v": false},
+      g_401873034: {"h": "MIA", "hn": "Dolphins", "hf": "Miami Dolphins", "hs": 19, "a": "NE", "an": "Patriots", "af": "New England Patriots", "as": 24, "w": "NE", "k": 1793568300000, "v": false},
+      g_401873035: {"h": "WSH", "hn": "Commanders", "hf": "Washington Commanders", "hs": 27, "a": "PHI", "an": "Eagles", "af": "Philadelphia Eagles", "as": 10, "w": "WSH", "k": 1793582400000, "v": false},
+      g_401873036: {"h": "SEA", "hn": "Seahawks", "hf": "Seattle Seahawks", "hs": 17, "a": "CHI", "an": "Bears", "af": "Chicago Bears", "as": 34, "w": "CHI", "k": 1793668500000, "v": false},
+    },
   },
   weeks: {
     1: {

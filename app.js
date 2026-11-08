@@ -83,6 +83,7 @@ function subscribeSeason() {
   seasonUnsub = db.collection('picks').where('season', '==', S.season).onSnapshot((snap) => {
     S.rawDocs = snap.docs.map((d) => parseSheet(d.data({ serverTimestamps: 'estimate' })));
     mergeDocs(); render();
+    if (S.ready) loadPickedWeeks(); // past weeks' scores for the Season tab, right away
   }, (e) => { console.warn('picks', e); });
   // Commissioner's paid / removed marks, one doc per player per week: "<season>-<week>_<uid>".
   statusUnsub = db.collection('status').where('season', '==', S.season).onSnapshot((snap) => {
@@ -362,7 +363,7 @@ function norm(e) {
 }
 // Saved results -> the same game shape ESPN data is turned into (all final).
 function resultsGames(w) {
-  const d = S.results[wkKey(w)] || ((window.PICKEM_HISTORY || {}).results || {})[wkKey(w)];
+  const d = ((window.PICKEM_HISTORY || {}).results || {})[wkKey(w)] || S.results[wkKey(w)];
   if (!d) return null;
   const games = Object.keys(d).filter((k) => k.startsWith('g_')).map((k) => {
     const r = d[k];
@@ -429,6 +430,9 @@ function looksRight(w, games) {
   return !picked.size || games.some((g) => picked.has(g.id));
 }
 async function loadWeek(w, force) {
+  // Weeks whose final scores are built into history.js never need ESPN.
+  const fixed = ((window.PICKEM_HISTORY || {}).results || {})[wkKey(w)];
+  if (fixed) { S.sb[w] = resultsGames(w); return S.sb[w]; }
   if (!force && S.sb[w]) return S.sb[w];
   if (!S.sb[w]) {
     try { const c = JSON.parse(localStorage.getItem(cacheKey(w)) || 'null'); if (c) { S.sb[w] = c; saveResults(w, c); if (!force) return c; } } catch (e) {}
@@ -510,7 +514,7 @@ function scoreWeek(w) {
   const ov = ((window.PICKEM_HISTORY || {}).winnerOverrides || {})[w];
   if (ov && ov.length) {
     const want = ov.map((n) => String(n).trim().toLowerCase());
-    winners = rows.filter((r) => want.includes(nameOf(r.uid).trim().toLowerCase())).map((r) => r.uid);
+    winners = rows.filter((r) => want.includes(r.uid.toLowerCase()) || want.includes(nameOf(r.uid).trim().toLowerCase())).map((r) => r.uid);
   }
   rows.forEach((r, i) => { r.rank = i && rows[i - 1].w === r.w && rows[i - 1].diff === r.diff ? rows[i - 1].rank : i + 1; });
   // Mathematically eliminated: even if every remaining game goes this player's way, someone else
@@ -557,6 +561,7 @@ const weekResult = (w) => histWeek(w) || scoreWeek(w);
 function scoreSeason() {
   const tot = {};
   seasonWeeks().forEach((w) => {
+    if (!S.sb[w] && ((window.PICKEM_HISTORY || {}).results || {})[wkKey(w)]) S.sb[w] = resultsGames(w);
     if (!(HIST.weeks || {})[w] && !S.sb[w]) return; // scores not loaded yet
     const s = weekResult(w);
     s.rows.forEach((r) => {
@@ -853,7 +858,10 @@ function seasonSheetHtml() {
   if (!rows.length) return '<div class="empty">No picks yet this season.</div>';
   const weeks = seasonWeeks();
   const per = {};
-  weeks.forEach((w) => { per[w] = (HIST.weeks || {})[w] || S.sb[w] ? weekResult(w) : null; });
+  weeks.forEach((w) => {
+    if (!S.sb[w] && ((window.PICKEM_HISTORY || {}).results || {})[wkKey(w)]) S.sb[w] = resultsGames(w);
+    per[w] = (HIST.weeks || {})[w] || S.sb[w] ? weekResult(w) : null;
+  });
   let h = '<div class="tablewrap"><table class="sheet"><thead><tr><th class="rank">#</th><th class="name">Player</th><th class="tot">W</th><th class="tot">L</th><th class="tot">Pct</th><th class="tot">🏆</th>';
   weeks.forEach((w) => { h += '<th class="tot">Wk ' + w + '</th>'; });
   h += '</tr></thead><tbody>';
@@ -1001,7 +1009,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && S.
 setInterval(() => { if (S.ready) render(); }, 60 * 1000);
 // Season standings need every week someone picked in.
 async function loadPickedWeeks() {
-  const weeks = [...new Set(S.docs.map((d) => d.week))].filter((w) => !S.sb[w]);
+  const weeks = [...new Set(S.docs.map((d) => d.week))].filter((w) => !S.sb[w] && !((window.PICKEM_HISTORY || {}).weeks || {})[w]);
   for (const w of weeks) await loadWeek(w);
   if (weeks.length) render();
 }
